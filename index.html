@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebCam Scanner Pro</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/theme.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <div class="header-left">
+        <div class="rec-dot" id="rec-dot"></div>
+        <h1>WebCam Scanner Pro</h1>
+        <span class="badge" id="status-badge">Offline</span>
+      </div>
+      <div class="header-right">
+        <span id="fps-bar">0 fps</span>
+        <span id="clock"></span>
+      </div>
+    </header>
+
+    <main class="main-grid">
+      <!-- CAMERA PANEL -->
+      <section class="cam-panel">
+        <div class="cam-wrap" id="cam-wrap">
+          <video id="video" autoplay muted playsinline></video>
+          <canvas id="overlay"></canvas>
+          <div id="no-cam-msg" class="no-cam">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M23 7l-7 5 7 5V7z"/>
+              <rect x="1" y="5" width="15" height="14" rx="2"/>
+            </svg>
+            <p>Klik "Aktifkan Kamera" untuk memulai</p>
+          </div>
+        </div>
+        <div class="cam-footer">
+          <button class="btn btn-primary" id="btn-start" onclick="App.startCam()">Aktifkan Kamera</button>
+          <button class="btn" id="btn-snap" onclick="App.takeSnapshot()" disabled>📷 Snapshot</button>
+          <button class="btn" id="btn-rec" onclick="App.toggleRecord()" disabled>⏺ Rekam</button>
+          <button class="btn btn-danger" id="btn-stop" onclick="App.stopCam()" style="display:none;">⏹ Stop</button>
+          <select id="cam-select" class="select" onchange="App.switchCam()"></select>
+          <label class="flip-label">
+            <input type="checkbox" id="flip-cb" onchange="App.toggleFlip()" /> Flip
+          </label>
+        </div>
+      </section>
+
+      <!-- SIDE PANEL -->
+      <aside class="side-panel">
+        <!-- Detection Modes -->
+        <div class="card">
+          <div class="card-title">Mode Deteksi</div>
+          <div class="mode-tabs" id="mode-tabs">
+            <span class="tab on" data-mode="motion" onclick="App.toggleMode(this)">Gerakan</span>
+            <span class="tab on" data-mode="face" onclick="App.toggleMode(this)">Wajah</span>
+            <span class="tab on" data-mode="pose" onclick="App.toggleMode(this)">Pose</span>
+            <span class="tab on" data-mode="light" onclick="App.toggleMode(this)">Cahaya</span>
+            <span class="tab on" data-mode="color" onclick="App.toggleMode(this)">Warna</span>
+            <span class="tab on" data-mode="zone" onclick="App.toggleMode(this)">Zona</span>
+          </div>
+          <div class="detect-grid">
+            <div class="detect-item">
+              <span class="detect-name">Gerakan</span>
+              <span class="detect-val" id="d-motion">—</span>
+              <div class="progress-bar"><div class="progress-fill red" id="p-motion" style="width:0%"></div></div>
+            </div>
+            <div class="detect-item">
+              <span class="detect-name">Kecepatan</span>
+              <span class="detect-val" id="d-speed">—</span>
+              <div class="progress-bar"><div class="progress-fill blue" id="p-speed" style="width:0%"></div></div>
+            </div>
+            <div class="detect-item">
+              <span class="detect-name">Wajah</span>
+              <span class="detect-val" id="d-face">—</span>
+              <div class="progress-bar"><div class="progress-fill green" id="p-face" style="width:0%"></div></div>
+            </div>
+            <div class="detect-item">
+              <span class="detect-name">Area Wajah</span>
+              <span class="detect-val" id="d-face-area">—</span>
+            </div>
+            <div class="detect-item">
+              <span class="detect-name">Kecerahan</span>
+              <span class="detect-val" id="d-bright">—</span>
+              <div class="progress-bar"><div class="progress-fill amber" id="p-bright" style="width:0%"></div></div>
+            </div>
+            <div class="detect-item">
+              <span class="detect-name">Kontras</span>
+              <span class="detect-val" id="d-contrast">—</span>
+              <div class="progress-bar"><div class="progress-fill purple" id="p-contrast" style="width:0%"></div></div>
+            </div>
+            <div class="detect-item">
+              <span class="detect-name">Warna Dominan</span>
+              <span class="detect-val" id="d-color">—</span>
+            </div>
+            <div class="detect-item">
+              <span class="detect-name">Saturasi</span>
+              <span class="detect-val" id="d-sat">—</span>
+              <div class="progress-bar"><div class="progress-fill pink" id="p-sat" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conditions -->
+        <div class="card">
+          <div class="card-title">Kondisi &amp; Lingkungan</div>
+          <div class="stat-row"><span class="stat-label">Status Cahaya</span><span class="stat-val" id="s-light">—</span></div>
+          <div class="stat-row"><span class="stat-label">Kebisingan Visual</span><span class="stat-val" id="s-noise">—</span></div>
+          <div class="stat-row"><span class="stat-label">Estimasi Jarak</span><span class="stat-val blue" id="s-dist">—</span></div>
+          <div class="stat-row"><span class="stat-label">Stabilitas Frame</span><span class="stat-val green" id="s-stable">—</span></div>
+          <div class="stat-row"><span class="stat-label">Resolusi Aktif</span><span class="stat-val" id="s-res">—</span></div>
+          <div class="stat-row"><span class="stat-label">Alert Gerakan</span><span class="stat-val red" id="s-alert">—</span></div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- BOTTOM ROW 1 -->
+    <div class="bottom-row">
+      <div class="card">
+        <div class="card-title">Heatmap Gerakan</div>
+        <canvas id="heatmap-canvas" class="heatmap-canvas" height="80"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title">Log Kejadian</div>
+        <div class="event-log" id="event-log">
+          <div class="event-item">
+            <div class="event-dot gray"></div>
+            Menunggu kamera aktif...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM ROW 2 -->
+    <div class="bottom-row">
+      <div class="card">
+        <div class="card-title">Kontrol PTZ Virtual</div>
+        <div class="ptz-layout">
+          <div class="ptz-pad">
+            <div></div>
+            <button class="ptz-btn" onclick="App.ptz('up')">▲</button>
+            <div></div>
+            <button class="ptz-btn" onclick="App.ptz('left')">◀</button>
+            <button class="ptz-btn center" onclick="App.ptz('center')">●</button>
+            <button class="ptz-btn" onclick="App.ptz('right')">▶</button>
+            <div></div>
+            <button class="ptz-btn" onclick="App.ptz('down')">▼</button>
+            <div></div>
+          </div>
+          <div class="zoom-control">
+            <label class="zoom-label-text">Zoom</label>
+            <input type="range" min="1" max="4" step="0.1" value="1" id="zoom-slider" oninput="App.setZoom(this.value)" />
+            <span id="zoom-label">1.0×</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Snapshot Terakhir</div>
+        <canvas id="snap-canvas" class="snapshot-preview"></canvas>
+        <button class="btn btn-full" onclick="App.downloadSnap()">⬇ Unduh Gambar</button>
+      </div>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="card" style="margin-top:10px;">
+      <div class="card-title">Filter &amp; Efek Real-time</div>
+      <div class="filter-tabs">
+        <span class="tab on" data-filter="none" onclick="App.setFilter(this,'none')">Normal</span>
+        <span class="tab" data-filter="grayscale" onclick="App.setFilter(this,'grayscale(1)')">Grayscale</span>
+        <span class="tab" data-filter="edge" onclick="App.setFilter(this,'edge')">Edge Detect</span>
+        <span class="tab" data-filter="invert" onclick="App.setFilter(this,'invert(1)')">Invert</span>
+        <span class="tab" data-filter="bright" onclick="App.setFilter(this,'brightness(1.5)')">+Cerah</span>
+        <span class="tab" data-filter="sepia" onclick="App.setFilter(this,'sepia(1)')">Sepia</span>
+        <span class="tab" data-filter="hue" onclick="App.setFilter(this,'hue-rotate(180deg)')">Hue Shift</span>
+        <span class="tab" data-filter="thermo" onclick="App.setFilter(this,'thermo')">Thermal</span>
+        <span class="tab" data-filter="saturate" onclick="App.setFilter(this,'saturate(3)')">Vivid</span>
+        <span class="tab" data-filter="blur" onclick="App.setFilter(this,'blur(3px)')">Blur</span>
+      </div>
+    </div>
+
+    <!-- HISTOGRAM -->
+    <div class="card" style="margin-top:10px;">
+      <div class="card-title">Histogram RGB</div>
+      <canvas id="histogram-canvas" class="histogram-canvas" height="70"></canvas>
+    </div>
+  </div>
+
+  <script src="js/utils.js"></script>
+  <script src="js/analyzer.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

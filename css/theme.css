@@ -1,0 +1,75 @@
+/* =============================================
+   WebCam Scanner Pro — theme.css
+   CSS Custom Properties (Light & Dark Mode)
+   ============================================= */
+
+:root {
+  /* Backgrounds */
+  --bg-page:       #f4f3ef;
+  --surface:       #ffffff;
+  --surface-hover: #f1efe8;
+
+  /* Text */
+  --text-primary:  #1a1a18;
+  --text-muted:    #666660;
+
+  /* Borders */
+  --border:        rgba(0,0,0,0.12);
+  --border-strong: rgba(0,0,0,0.22);
+
+  /* Accent (info/blue) */
+  --accent-bg:     #e6f1fb;
+  --accent-color:  #0c447c;
+  --accent-border: #85b7eb;
+
+  /* Status colors */
+  --success-bg:    #eaf3de;
+  --success-color: #3b6d11;
+  --danger-bg:     #fcebeb;
+  --danger-color:  #a32d2d;
+  --warn-bg:       #faeeda;
+  --warn-color:    #633806;
+
+  /* Badge */
+  --badge-bg:      #d3d1c7;
+  --badge-color:   #444441;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-page:       #1a1a18;
+    --surface:       #242422;
+    --surface-hover: #2c2c2a;
+
+    --text-primary:  #f1efe8;
+    --text-muted:    #888780;
+
+    --border:        rgba(255,255,255,0.1);
+    --border-strong: rgba(255,255,255,0.2);
+
+    --accent-bg:     #042c53;
+    --accent-color:  #85b7eb;
+    --accent-border: #185fa5;
+
+    --success-bg:    #173404;
+    --success-color: #c0dd97;
+    --danger-bg:     #501313;
+    --danger-color:  #f09595;
+    --warn-bg:       #412402;
+    --warn-color:    #fac775;
+
+    --badge-bg:      #444441;
+    --badge-color:   #d3d1c7;
+  }
+
+  .stat-val.green { color: #c0dd97 !important; }
+  .stat-val.red   { color: #f09595 !important; }
+  .stat-val.blue  { color: #85b7eb !important; }
+  .badge.live     { background: #173404; color: #c0dd97; }
+  .btn-danger     { background: #501313; color: #f09595; border-color: #791f1f; }
+}
+
+/* ---- Scrollbar global ---- */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
