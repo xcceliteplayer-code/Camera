@@ -213,44 +213,99 @@ const Analyzer = (() => {
         const density = cells.length / boxArea;
         if (density < 0.35) continue;
 
+        // === HAND REJECTION FILTERS ===
+
+        // 1. Vertical "finger" test: scan columns for isolated skin strips
+        //    Hands have tall narrow columns of skin (fingers), faces don't
+        let thinColCount = 0;
+        for (let cx2 = minX; cx2 <= maxX; cx2++) {
+          let colSkin = 0;
+          for (let cy2 = minY; cy2 <= maxY; cy2++) {
+            if (skinMap[cy2 * sw + cx2]) colSkin++;
+          }
+          const colFill = colSkin / (maxY - minY + 1);
+          // A column that has isolated thin skin strips (< 30% fill) = finger-like
+          if (colFill > 0.05 && colFill < 0.28) thinColCount++;
+        }
+        const thinColRatio = thinColCount / (bw + 1);
+        if (thinColRatio > 0.55) continue; // too many finger-like columns → hand
+
+        // 2. Horizontal symmetry score: faces are more symmetric than hands
+        //    Compare left vs right half of skin columns
+        const mid = Math.floor((minX + maxX) / 2);
+        let leftCols = 0, rightCols = 0;
+        for (let cx2 = minX; cx2 < mid; cx2++) {
+          for (let cy2 = minY; cy2 <= maxY; cy2++) {
+            if (skinMap[cy2 * sw + cx2]) { leftCols++; break; }
+          }
+        }
+        for (let cx2 = mid; cx2 <= maxX; cx2++) {
+          for (let cy2 = minY; cy2 <= maxY; cy2++) {
+            if (skinMap[cy2 * sw + cx2]) { rightCols++; break; }
+          }
+        }
+        const symRatio = Math.min(leftCols, rightCols) / (Math.max(leftCols, rightCols) + 1);
+        // Hands (spread fingers) are often asymmetric; faces are symmetric
+        if (symRatio < 0.4) continue;
+
+        // 3. Center-of-mass Y position: face center should be in upper 70% of frame
+        const centerY = (minY + maxY) / 2 / sh;
+        // Blob in the bottom 35% of frame is very unlikely to be a face
+        if (centerY > 0.72) continue;
+
+        // 4. Blob "compactness" — hands are elongated, faces are compact
+        //    Compactness = area / (perimeter^2) * 4π (circularity)
+        //    We approximate: cells / (bw * bh) already done, but also check w vs h balance
+        const elongation = Math.max(bw, bh) / (Math.min(bw, bh) + 1);
+        if (elongation > 1.8) continue; // too elongated → not a face
+
         regions.push({
           x:    minX * SCALE,
           y:    minY * SCALE,
           w:    bw   * SCALE,
           h:    bh   * SCALE,
           area: cells.length,
-          density
+          density,
+          centerY // normalized 0-1
         });
       }
     }
 
-    // Sort largest first
-    regions.sort((a, b) => b.area - a.area);
+    // Sort by combined score: largest area + upper position bonus
+    regions.sort((a, b) => {
+      const scoreA = a.area * (1 - a.centerY * 0.5);
+      const scoreB = b.area * (1 - b.centerY * 0.5);
+      return scoreB - scoreA;
+    });
 
-    // Non-Maximum Suppression: remove boxes that overlap >50% with a larger one
+    // Non-Maximum Suppression (IoU > 40% → keep larger only)
     const iou = (a, b) => {
       const ix1 = Math.max(a.x, b.x), iy1 = Math.max(a.y, b.y);
       const ix2 = Math.min(a.x + a.w, b.x + b.w), iy2 = Math.min(a.y + a.h, b.y + b.h);
       if (ix2 <= ix1 || iy2 <= iy1) return 0;
       const inter = (ix2 - ix1) * (iy2 - iy1);
-      const uni   = a.w * a.h + b.w * b.h - inter;
-      return inter / uni;
+      return inter / (a.w * a.h + b.w * b.h - inter);
     };
 
     const kept = [];
     for (const r of regions) {
-      if (kept.every(k => iou(k, r) < 0.4)) kept.push(r);
-      if (kept.length >= 2) break; // max 2 real faces
+      if (kept.every(k => iou(k, r) < 0.35)) kept.push(r);
+      if (kept.length >= 1) break; // only return 1 face to avoid false positives
     }
 
-    // Final sanity: if a "face" is mostly in the lower half and smaller than 40%
-    // of the largest face area → likely a hand/neck, discard it
-    const largest = kept[0];
-    return kept.filter((r, i) => {
-      if (i === 0) return true;
-      const sizeRatio = r.area / largest.area;
-      return sizeRatio > 0.4; // must be at least 40% the size of main face
-    });
+    // Allow 2nd face only if it's clearly in upper half AND similar size to first
+    for (const r of regions) {
+      if (kept.includes(r)) continue;
+      if (kept.length >= 2) break;
+      const main = kept[0];
+      if (!main) break;
+      const sizeOk  = r.area / main.area > 0.45;
+      const posOk   = r.centerY < 0.55;
+      const noOverlap = iou(main, r) < 0.35;
+      if (sizeOk && posOk && noOverlap) kept.push(r);
+    }
+
+    return kept;
   };
 
   /* ----------------------------------------------------------
