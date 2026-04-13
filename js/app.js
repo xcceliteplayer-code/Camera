@@ -73,7 +73,7 @@ const CamCtrl = {
         audio:false
       });
       video.srcObject = State.stream;
-      U.el('no-cam').style.display='none';
+      U.el('no-cam').classList.add('hidden');
       U.el('btn-start').disabled=true;
       U.el('btn-stop').style.display='flex';
       U.el('btn-snap').disabled=false;
@@ -86,11 +86,17 @@ const CamCtrl = {
       U.log('Kamera aktif', 'green');
       await this._enumCams();
       video.addEventListener('loadedmetadata',()=>{
-        overlay.width  = video.videoWidth  || 640;
-        overlay.height = video.videoHeight || 480;
-        hmC.width  = hmC.offsetWidth  || 300;
+        // Size canvas to match actual video resolution for pixel-accurate analysis
+        const vw = video.videoWidth  || 640;
+        const vh = video.videoHeight || 480;
+        overlay.width  = vw;
+        overlay.height = vh;
+        // Make canvas fill the container visually via CSS
+        overlay.style.width  = '100%';
+        overlay.style.height = '100%';
+        hmC.width   = hmC.offsetWidth   || 300;
         histC.width = histC.offsetWidth || 300;
-        U.set('res-val', `${video.videoWidth}×${video.videoHeight}`);
+        U.set('res-val', `${vw}×${vh}`);
         this._loop();
       },{once:true});
     } catch(e) {
@@ -103,7 +109,7 @@ const CamCtrl = {
     State.stream=null;
     if(State.animId) cancelAnimationFrame(State.animId);
     video.srcObject=null; ctx.clearRect(0,0,overlay.width,overlay.height);
-    U.el('no-cam').style.display='flex';
+    U.el('no-cam').classList.remove('hidden');
     U.el('btn-start').disabled=false;
     U.el('btn-stop').style.display='none';
     ['btn-snap','btn-rec','btn-ai-snap'].forEach(id=>U.el(id).disabled=true);
