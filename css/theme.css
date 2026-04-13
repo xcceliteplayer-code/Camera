@@ -1,75 +1,63 @@
-/* =============================================
-   WebCam Scanner Pro — theme.css
-   CSS Custom Properties (Light & Dark Mode)
-   ============================================= */
+/* ══════════════════════════════════════
+   WCAM PRO V2 — theme.css
+   Dark industrial / terminal aesthetic
+══════════════════════════════════════ */
 
 :root {
-  /* Backgrounds */
-  --bg-page:       #f4f3ef;
-  --surface:       #ffffff;
-  --surface-hover: #f1efe8;
+  --bg:           #0a0a0c;
+  --bg2:          #111115;
+  --bg3:          #18181e;
+  --surface:      #1c1c22;
+  --surface2:     #22222a;
+  --border:       #2a2a35;
+  --border2:      #3a3a48;
 
-  /* Text */
-  --text-primary:  #1a1a18;
-  --text-muted:    #666660;
+  --text:         #e8e6f0;
+  --text2:        #9090a8;
+  --text3:        #55556a;
 
-  /* Borders */
-  --border:        rgba(0,0,0,0.12);
-  --border-strong: rgba(0,0,0,0.22);
+  --accent:       #00e5b0;
+  --accent2:      #00b38a;
+  --accent-dim:   rgba(0,229,176,0.12);
 
-  /* Accent (info/blue) */
-  --accent-bg:     #e6f1fb;
-  --accent-color:  #0c447c;
-  --accent-border: #85b7eb;
+  --red:          #ff4b6e;
+  --red-dim:      rgba(255,75,110,0.15);
+  --blue:         #4b9fff;
+  --blue-dim:     rgba(75,159,255,0.15);
+  --amber:        #ffb84b;
+  --amber-dim:    rgba(255,184,75,0.15);
+  --green:        #4bff8f;
+  --green-dim:    rgba(75,255,143,0.15);
+  --purple:       #b44bff;
+  --purple-dim:   rgba(180,75,255,0.15);
+  --pink:         #ff4ba8;
+  --pink-dim:     rgba(255,75,168,0.15);
+  --teal:         #4beeff;
+  --teal-dim:     rgba(75,238,255,0.15);
 
-  /* Status colors */
-  --success-bg:    #eaf3de;
-  --success-color: #3b6d11;
-  --danger-bg:     #fcebeb;
-  --danger-color:  #a32d2d;
-  --warn-bg:       #faeeda;
-  --warn-color:    #633806;
+  --font-mono:    'Space Mono', monospace;
+  --font-sans:    'DM Sans', sans-serif;
 
-  /* Badge */
-  --badge-bg:      #d3d1c7;
-  --badge-color:   #444441;
+  --r-sm:         4px;
+  --r-md:         8px;
+  --r-lg:         12px;
+
+  --transition:   0.18s cubic-bezier(0.4,0,0.2,1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-page:       #1a1a18;
-    --surface:       #242422;
-    --surface-hover: #2c2c2a;
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
-    --text-primary:  #f1efe8;
-    --text-muted:    #888780;
-
-    --border:        rgba(255,255,255,0.1);
-    --border-strong: rgba(255,255,255,0.2);
-
-    --accent-bg:     #042c53;
-    --accent-color:  #85b7eb;
-    --accent-border: #185fa5;
-
-    --success-bg:    #173404;
-    --success-color: #c0dd97;
-    --danger-bg:     #501313;
-    --danger-color:  #f09595;
-    --warn-bg:       #412402;
-    --warn-color:    #fac775;
-
-    --badge-bg:      #444441;
-    --badge-color:   #d3d1c7;
-  }
-
-  .stat-val.green { color: #c0dd97 !important; }
-  .stat-val.red   { color: #f09595 !important; }
-  .stat-val.blue  { color: #85b7eb !important; }
-  .badge.live     { background: #173404; color: #c0dd97; }
-  .btn-danger     { background: #501313; color: #f09595; border-color: #791f1f; }
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: hidden;
 }
 
-/* ---- Scrollbar global ---- */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }

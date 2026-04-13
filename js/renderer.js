@@ -1,275 +1,222 @@
-/* =============================================
-   WebCam Scanner Pro — renderer.js
-   Canvas overlay: face boxes, skeleton, zones,
-   heatmap, histogram, filters
-   ============================================= */
-
+/* ══════════════════════════════════════
+   WCAM PRO V2 — renderer.js
+   Canvas drawing: face, body, skeleton, zones, heatmap, histogram
+══════════════════════════════════════ */
 'use strict';
 
 const Renderer = (() => {
 
-  /* ----------------------------------------------------------
-     FACE BOXES + LANDMARK HINTS
-  ---------------------------------------------------------- */
+  /* ── FACE BOX ── */
+  const drawFace = (ctx, face, idx=0) => {
+    const colors = ['#00e5b0','#4b9fff','#ffb84b'];
+    const c = colors[idx] || '#888';
+    const {x,y,w,h} = face;
+    ctx.save();
 
-  const drawFaces = (ctx, faces) => {
-    const colors = ['#639922', '#ef9f27', '#378add'];
+    // Main box
+    ctx.strokeStyle = c; ctx.lineWidth = 1.5;
+    ctx.strokeRect(x,y,w,h);
+    ctx.fillStyle = c+'18'; ctx.fillRect(x,y,w,h);
 
-    faces.forEach((face, i) => {
-      const c = colors[i] || '#888';
-
-      // Box
-      ctx.save();
-      ctx.strokeStyle = c;
-      ctx.lineWidth   = 2;
-      ctx.setLineDash([]);
-      ctx.strokeRect(face.x, face.y, face.w, face.h);
-
-      // Fill tint
-      ctx.fillStyle = c + '18';
-      ctx.fillRect(face.x, face.y, face.w, face.h);
-
-      // Corner accents
-      const cs = 12;
-      ctx.lineWidth = 3;
-      [[face.x, face.y], [face.x + face.w, face.y], [face.x, face.y + face.h], [face.x + face.w, face.y + face.h]].forEach(([cx, cy]) => {
-        const dx = cx === face.x ? cs : -cs;
-        const dy = cy === face.y ? cs : -cs;
-        ctx.beginPath();
-        ctx.moveTo(cx + dx, cy);
-        ctx.lineTo(cx, cy);
-        ctx.lineTo(cx, cy + dy);
-        ctx.stroke();
-      });
-
-      // Label
-      ctx.font      = 'bold 11px monospace';
-      ctx.fillStyle = c;
-      ctx.fillText(`Wajah ${i + 1}`, face.x + 4, face.y > 14 ? face.y - 4 : face.y + 14);
-
-      // Landmark hints (eyes, nose, mouth)
-      const { x, y, w, h } = face;
-      ctx.fillStyle = 'rgba(55,138,221,0.75)';
-
-      // Eyes
-      const ew = w * 0.14, eh = h * 0.08;
-      ctx.fillRect(x + w * 0.22, y + h * 0.28, ew, eh); // left eye
-      ctx.fillRect(x + w * 0.62, y + h * 0.28, ew, eh); // right eye
-
-      // Nose
-      ctx.fillStyle = 'rgba(55,138,221,0.5)';
-      ctx.beginPath();
-      ctx.arc(x + w * 0.5, y + h * 0.55, w * 0.06, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Mouth
-      ctx.strokeStyle = 'rgba(55,138,221,0.6)';
-      ctx.lineWidth   = 1.5;
-      ctx.beginPath();
-      ctx.arc(x + w * 0.5, y + h * 0.7, w * 0.18, 0, Math.PI);
-      ctx.stroke();
-
-      ctx.restore();
+    // Corner accents
+    const cs = 10; ctx.lineWidth = 3;
+    [[x,y],[x+w,y],[x,y+h],[x+w,y+h]].forEach(([cx,cy])=>{
+      const dx=cx===x?cs:-cs, dy=cy===y?cs:-cs;
+      ctx.beginPath(); ctx.moveTo(cx+dx,cy); ctx.lineTo(cx,cy); ctx.lineTo(cx,cy+dy); ctx.stroke();
     });
+
+    // Label
+    ctx.font = 'bold 10px "Space Mono",monospace'; ctx.fillStyle = c;
+    ctx.fillText(`WAJAH ${idx+1}`, x+4, y>14?y-4:y+14);
+
+    // Landmark dots
+    const lm = [
+      [x+w*0.26,y+h*0.30,4], // left eye
+      [x+w*0.63,y+h*0.30,4], // right eye
+      [x+w*0.50,y+h*0.52,3], // nose
+      [x+w*0.38,y+h*0.72,2], // mouth L
+      [x+w*0.62,y+h*0.72,2], // mouth R
+    ];
+    lm.forEach(([lx,ly,r])=>{
+      ctx.beginPath(); ctx.arc(lx,ly,r,0,Math.PI*2);
+      ctx.fillStyle = 'rgba(75,159,255,0.8)'; ctx.fill();
+    });
+
+    // Smile arc
+    ctx.strokeStyle='rgba(75,159,255,0.5)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(x+w*0.5,y+h*0.68,w*0.17,0,Math.PI); ctx.stroke();
+
+    ctx.restore();
   };
 
-  /* ----------------------------------------------------------
-     SKELETON / POSE OVERLAY
-  ---------------------------------------------------------- */
+  /* ── BODY BOX ── */
+  const drawBody = (ctx, body) => {
+    if (!body) return;
+    const {x,y,w,h} = body;
+    ctx.save();
+    ctx.strokeStyle = '#ffb84b'; ctx.lineWidth = 1;
+    ctx.setLineDash([5,4]);
+    ctx.strokeRect(x,y,w,h);
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,184,75,0.04)'; ctx.fillRect(x,y,w,h);
 
-  const drawPose = (ctx, face) => {
-    if (!face) return;
+    ctx.font = 'bold 9px "Space Mono",monospace';
+    ctx.fillStyle = '#ffb84b';
+    ctx.fillText('UPPER BODY', x+4, y+12);
+    ctx.restore();
+  };
 
-    const { x, y, w, h } = face;
-    const cx = x + w / 2;
-    const s  = h; // scale unit
-
-    // Joint definitions
-    const J = {
-      head:      [cx,       y + h * 0.5],
-      neck:      [cx,       y + s * 1.05],
-      lShoulder: [cx - s * 0.65, y + s * 1.4],
-      rShoulder: [cx + s * 0.65, y + s * 1.4],
-      lElbow:    [cx - s * 1.0,  y + s * 2.1],
-      rElbow:    [cx + s * 1.0,  y + s * 2.1],
-      lWrist:    [cx - s * 1.2,  y + s * 2.85],
-      rWrist:    [cx + s * 1.2,  y + s * 2.85],
-      spine:     [cx,       y + s * 1.9],
-      lHip:      [cx - s * 0.45, y + s * 2.5],
-      rHip:      [cx + s * 0.45, y + s * 2.5],
-      lKnee:     [cx - s * 0.5,  y + s * 3.55],
-      rKnee:     [cx + s * 0.5,  y + s * 3.55],
-      lAnkle:    [cx - s * 0.55, y + s * 4.6],
-      rAnkle:    [cx + s * 0.55, y + s * 4.6],
-    };
+  /* ── SKELETON ── */
+  const drawSkeleton = (ctx, body, face) => {
+    if (!body || !face) return;
+    const J = body.joints;
+    if (!J) return;
 
     const bones = [
-      ['head', 'neck'],
-      ['neck', 'lShoulder'], ['neck', 'rShoulder'],
-      ['lShoulder', 'lElbow'], ['lElbow', 'lWrist'],
-      ['rShoulder', 'rElbow'], ['rElbow', 'rWrist'],
-      ['neck', 'spine'],
-      ['spine', 'lHip'], ['spine', 'rHip'],
-      ['lHip', 'lKnee'], ['lKnee', 'lAnkle'],
-      ['rHip', 'rKnee'], ['rKnee', 'rAnkle'],
+      ['neck','lShoulder'],['neck','rShoulder'],
+      ['lShoulder','lElbow'],['rShoulder','rElbow'],
+      ['lElbow','lWrist'],['rElbow','rWrist'],
+      ['neck','sternum'],
+      ['sternum','lHip'],['sternum','rHip'],
+      ['lShoulder','lHip'],['rShoulder','rHip'],
     ];
 
     ctx.save();
-    ctx.globalAlpha  = 0.75;
-    ctx.strokeStyle  = '#7f77dd';
-    ctx.lineWidth    = 2;
-
-    bones.forEach(([a, b]) => {
-      if (!J[a] || !J[b]) return;
-      ctx.beginPath();
-      ctx.moveTo(J[a][0], J[a][1]);
-      ctx.lineTo(J[b][0], J[b][1]);
-      ctx.stroke();
+    ctx.strokeStyle = 'rgba(180,75,255,0.65)'; ctx.lineWidth = 1.5;
+    bones.forEach(([a,b])=>{
+      if(!J[a]||!J[b]) return;
+      const [ax,ay]=J[a],[bx,by]=J[b];
+      // Clamp to visible area
+      if(ax<0||ay<0||bx<0||by<0) return;
+      ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
     });
 
-    ctx.fillStyle = '#afa9ec';
-    Object.values(J).forEach(([jx, jy]) => {
-      ctx.beginPath();
-      ctx.arc(jx, jy, 3.5, 0, Math.PI * 2);
-      ctx.fill();
+    // Joints
+    ctx.fillStyle='rgba(180,75,255,0.9)';
+    Object.values(J).forEach(([jx,jy])=>{
+      if(jx<0||jy<0) return;
+      ctx.beginPath(); ctx.arc(jx,jy,3,0,Math.PI*2); ctx.fill();
     });
 
     ctx.restore();
   };
 
-  /* ----------------------------------------------------------
-     ZONE GRID OVERLAY (motion zones)
-  ---------------------------------------------------------- */
-
+  /* ── ZONE GRID ── */
   const drawZones = (ctx, W, H, heatmap) => {
-    const COLS = 3, ROWS = 3;
-    const zW = W / COLS, zH = H / ROWS;
-
-    const labels = [
-      'Kiri-Atas',   'Tengah-Atas',   'Kanan-Atas',
-      'Kiri-Mid',    'Tengah',         'Kanan-Mid',
-      'Kiri-Bawah', 'Tengah-Bawah', 'Kanan-Bawah'
-    ];
-
+    const COLS=3,ROWS=3;
+    const zW=W/COLS, zH=H/ROWS;
+    const labels=['Kiri-Atas','Tengah-Atas','Kanan-Atas','Kiri-Mid','Tengah','Kanan-Mid','Kiri-Bawah','Tengah-Bawah','Kanan-Bawah'];
     ctx.save();
-
-    for (let zy = 0; zy < ROWS; zy++) {
-      for (let zx = 0; zx < COLS; zx++) {
-        // Map zone to heatmap region (16×12 → 3×3)
-        const hCol = Math.floor(zx * 5.3);
-        const hRow = Math.floor(zy * 4);
-        const heat = heatmap[hRow * 16 + hCol] || 0;
-        if (heat < 18) continue;
-
-        const alpha   = Math.min(0.85, heat / 100);
-        const fillA   = Math.min(0.2,  heat / 200);
-        const lx = zx * zW, ly = zy * zH;
-
-        ctx.strokeStyle = `rgba(226,75,74,${alpha})`;
-        ctx.lineWidth   = 1.5;
-        ctx.setLineDash([5, 5]);
-        ctx.strokeRect(lx + 2, ly + 2, zW - 4, zH - 4);
-        ctx.setLineDash([]);
-
-        ctx.fillStyle = `rgba(226,75,74,${fillA})`;
-        ctx.fillRect(lx + 2, ly + 2, zW - 4, zH - 4);
-
-        ctx.fillStyle = `rgba(226,75,74,${alpha})`;
-        ctx.font      = 'bold 10px monospace';
-        ctx.fillText(labels[zy * COLS + zx], lx + 6, ly + 16);
-      }
+    for(let zy=0;zy<ROWS;zy++) for(let zx=0;zx<COLS;zx++) {
+      const hCol=Math.floor(zx*5.3), hRow=Math.floor(zy*4);
+      const heat=heatmap[hRow*16+hCol]||0;
+      if(heat<16) continue;
+      const alpha=Math.min(0.85,heat/100), fillA=Math.min(0.18,heat/220);
+      const lx=zx*zW, ly=zy*zH;
+      ctx.strokeStyle=`rgba(255,75,110,${alpha})`; ctx.lineWidth=1;
+      ctx.setLineDash([4,4]); ctx.strokeRect(lx+2,ly+2,zW-4,zH-4); ctx.setLineDash([]);
+      ctx.fillStyle=`rgba(255,75,110,${fillA})`; ctx.fillRect(lx+2,ly+2,zW-4,zH-4);
+      ctx.fillStyle=`rgba(255,75,110,${alpha})`; ctx.font='bold 9px "Space Mono",monospace';
+      ctx.fillText(labels[zy*COLS+zx],lx+5,ly+14);
     }
-
     ctx.restore();
   };
 
-  /* ----------------------------------------------------------
-     HEATMAP CANVAS
-  ---------------------------------------------------------- */
-
-  const drawHeatmap = (hmc, hmCtx, heatmap, cols = 16, rows = 12) => {
-    const W = hmc.width  || hmc.offsetWidth  || 300;
-    const H = hmc.height || 80;
-    const cw = W / cols, ch = H / rows;
-
-    hmCtx.clearRect(0, 0, W, H);
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const v = heatmap[r * cols + c];
-        if (v < 5) continue;
-        const heat  = Math.min(1, v / 100);
-        const red   = Math.min(255, heat * 510);
-        const green = Math.max(0, 255 - heat * 510);
-        const alpha = Math.min(0.92, heat * 1.2);
-        hmCtx.fillStyle = `rgba(${Math.round(red)},${Math.round(green)},0,${alpha})`;
-        hmCtx.fillRect(c * cw, r * ch, cw - 1, ch - 1);
-      }
+  /* ── HEATMAP ── */
+  const drawHeatmap = (canvas, ctx2d, heatmap, cols=16, rows=12) => {
+    const W=canvas.width||300, H=canvas.height||70;
+    const cw=W/cols, ch=H/rows;
+    ctx2d.clearRect(0,0,W,H);
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) {
+      const v=heatmap[r*cols+c];
+      if(v<5) continue;
+      const heat=Math.min(1,v/100);
+      const red=Math.min(255,heat*510), green=Math.max(0,255-heat*510);
+      ctx2d.fillStyle=`rgba(${Math.round(red)},${Math.round(green)},0,${Math.min(0.9,heat*1.2)})`;
+      ctx2d.fillRect(c*cw,r*ch,cw-1,ch-1);
     }
   };
 
-  /* ----------------------------------------------------------
-     HISTOGRAM CANVAS (RGB)
-  ---------------------------------------------------------- */
-
-  const drawHistogram = (canvas, histCtx, hist) => {
-    const W = canvas.width  || canvas.offsetWidth || 300;
-    const H = canvas.height || 70;
-
-    histCtx.clearRect(0, 0, W, H);
-
-    const channels = [
-      { data: hist.r, color: 'rgba(226,75,74,0.6)' },
-      { data: hist.g, color: 'rgba(99,153,34,0.6)'  },
-      { data: hist.b, color: 'rgba(55,138,221,0.6)'  },
+  /* ── HISTOGRAM ── */
+  const drawHistogram = (canvas, ctx2d, hist) => {
+    const W=canvas.width||300, H=canvas.height||60;
+    ctx2d.clearRect(0,0,W,H);
+    // Dark bg
+    ctx2d.fillStyle='rgba(0,0,0,0.3)'; ctx2d.fillRect(0,0,W,H);
+    const channels=[
+      {data:hist.r,color:'rgba(255,75,110,0.6)'},
+      {data:hist.g,color:'rgba(75,255,143,0.6)'},
+      {data:hist.b,color:'rgba(75,159,255,0.6)'}
     ];
-
-    channels.forEach(({ data, color }) => {
-      const max = Math.max(...data) || 1;
-      histCtx.beginPath();
-      histCtx.fillStyle = color;
-      for (let i = 0; i < 256; i++) {
-        const bh = (data[i] / max) * H;
-        const bx = (i / 256) * W;
-        const bw = W / 256;
-        histCtx.fillRect(bx, H - bh, bw, bh);
+    channels.forEach(({data,color})=>{
+      const max=Math.max(...data)||1;
+      ctx2d.fillStyle=color;
+      for(let i=0;i<256;i++) {
+        const bh=(data[i]/max)*H;
+        ctx2d.fillRect((i/256)*W,H-bh,W/256+0.5,bh);
       }
+    });
+    // Grid lines
+    ctx2d.strokeStyle='rgba(255,255,255,0.06)'; ctx2d.lineWidth=0.5;
+    [0.25,0.5,0.75].forEach(p=>{
+      ctx2d.beginPath(); ctx2d.moveTo(W*p,0); ctx2d.lineTo(W*p,H); ctx2d.stroke();
     });
   };
 
-  /* ----------------------------------------------------------
-     FILTER APPLICATION
-  ---------------------------------------------------------- */
-
-  /**
-   * Apply a pixel-level filter to ImageData in place
-   * @param {ImageData} imgData
-   * @param {string} filter  'edge' | 'thermo' | 'none' | css-filter-string (ignored here)
-   */
+  /* ── PIXEL FILTERS ── */
   const applyPixelFilter = (imgData, filter) => {
-    const d = imgData.data;
-    const len = d.length;
-
-    if (filter === 'thermo') {
-      for (let i = 0; i < len; i += 4) {
-        const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        const t   = lum / 255;
-        d[i]     = Math.min(255, t * 2 * 255);
-        d[i + 1] = Math.max(0, Math.min(255, (t - 0.5) * 2 * 255));
-        d[i + 2] = Math.max(0, (1 - t * 2) * 255);
+    const d=imgData.data, len=d.length;
+    if(filter==='thermo') {
+      for(let i=0;i<len;i+=4) {
+        const l=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2], t=l/255;
+        d[i]=Math.min(255,t*2*255);
+        d[i+1]=Math.max(0,Math.min(255,(t-0.5)*2*255));
+        d[i+2]=Math.max(0,(1-t*2)*255);
       }
       return true;
     }
-
-    return false; // CSS filter handled elsewhere
+    if(filter==='edge') {
+      // Simple Sobel approximation (modifies copy)
+      const copy=new Uint8ClampedArray(d);
+      const W=imgData.width, H=imgData.height;
+      for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++) {
+        const i=(y*W+x)*4;
+        for(let c=0;c<3;c++) {
+          const gx=-copy[(y*W+(x-1))*4+c]+copy[(y*W+(x+1))*4+c];
+          const gy=-copy[((y-1)*W+x)*4+c]+copy[((y+1)*W+x)*4+c];
+          d[i+c]=Math.min(255,Math.sqrt(gx*gx+gy*gy));
+        }
+        d[i+3]=255;
+      }
+      return true;
+    }
+    if(filter==='night') {
+      // Green-tinted night vision
+      for(let i=0;i<len;i+=4) {
+        const l=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+        const nl=Math.min(255,l*1.4);
+        d[i]=0; d[i+1]=Math.min(255,nl*1.2); d[i+2]=0;
+      }
+      return true;
+    }
+    return false;
   };
 
-  return {
-    drawFaces,
-    drawPose,
-    drawZones,
-    drawHeatmap,
-    drawHistogram,
-    applyPixelFilter
+  /* ── CROSSHAIR ON FACE CENTER ── */
+  const drawCrosshair = (ctx, face) => {
+    if (!face) return;
+    const cx = face.x + face.w/2, cy = face.y + face.h/2;
+    ctx.save();
+    ctx.strokeStyle='rgba(0,229,176,0.5)'; ctx.lineWidth=0.5;
+    ctx.setLineDash([3,4]);
+    ctx.beginPath(); ctx.moveTo(cx,0); ctx.lineTo(cx,ctx.canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,cy); ctx.lineTo(ctx.canvas.width,cy); ctx.stroke();
+    ctx.setLineDash([]);
+    // center dot
+    ctx.fillStyle='rgba(0,229,176,0.6)';
+    ctx.beginPath(); ctx.arc(cx,cy,3,0,Math.PI*2); ctx.fill();
+    ctx.restore();
   };
+
+  return { drawFace, drawBody, drawSkeleton, drawZones, drawHeatmap, drawHistogram, applyPixelFilter, drawCrosshair };
 })();

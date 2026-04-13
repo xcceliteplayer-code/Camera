@@ -1,113 +1,55 @@
-/* =============================================
-   WebCam Scanner Pro — utils.js
-   Helper utilities (ES6+)
-   ============================================= */
-
+/* ══════════════════════════════════════
+   WCAM PRO V2 — utils.js
+══════════════════════════════════════ */
 'use strict';
 
-const Utils = (() => {
+const U = (() => {
+  const set   = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  const pct   = (id, v) => { const e = document.getElementById(id); if (e) e.style.width = Math.round(Math.min(100,Math.max(0,v))) + '%'; };
+  const el    = (id)    => document.getElementById(id);
+  const clamp = (v,a,b) => Math.min(b,Math.max(a,v));
+  const lerp  = (a,b,t) => a + (b-a)*t;
+  const ts    = ()      => new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const rand  = (a,b)   => Math.random()*(b-a)+a;
 
-  /** Set text content of element by ID */
-  const set = (id, val) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = val;
-  };
-
-  /** Set width (%) of progress bar fill */
-  const pct = (id, val) => {
-    const el = document.getElementById(id);
-    if (el) el.style.width = Math.round(Math.max(0, Math.min(100, val))) + '%';
-  };
-
-  /** Format timestamp HH:MM:SS */
-  const timestamp = () =>
-    new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-  /** Clamp number between min and max */
-  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-
-  /** Map value from one range to another */
-  const mapRange = (v, inMin, inMax, outMin, outMax) =>
-    outMin + ((v - inMin) / (inMax - inMin)) * (outMax - outMin);
-
-  /** Compute rolling average from array */
-  const rollingAvg = (arr, last = 10) => {
-    const slice = arr.slice(-last);
-    return slice.reduce((a, b) => a + b, 0) / (slice.length || 1);
-  };
-
-  /**
-   * Identify dominant color name from RGB
-   * @param {number} r
-   * @param {number} g
-   * @param {number} b
-   * @returns {string}
-   */
-  const colorName = (r, g, b) => {
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    if (max < 40)  return 'Hitam';
-    if (min > 200) return 'Putih';
-    const diff = max - min;
-    if (diff < 20) return 'Abu-abu';
-    if (r >= g && r >= b) {
-      if (r > 180 && g > 120 && b < 80) return 'Oranye';
-      if (r > 150 && g > 100 && b > 100) return 'Merah Muda';
-      return 'Merah';
-    }
-    if (g >= r && g >= b) {
-      if (g > 150 && r > 120) return 'Kuning-Hijau';
-      return 'Hijau';
-    }
-    if (b >= r && b >= g) {
-      if (b > 150 && r > 100) return 'Ungu';
-      return 'Biru';
-    }
-    if (r > 180 && g > 180 && b < 100) return 'Kuning';
+  const colorName = (r,g,b) => {
+    const max=Math.max(r,g,b), min=Math.min(r,g,b);
+    if(max<40) return 'Hitam';
+    if(min>215) return 'Putih';
+    if(max-min<20) return 'Abu-abu';
+    if(r>=g&&r>=b) return (r>160&&g>120&&b<80)?'Oranye':(r>150&&g>100&&b>80)?'Merah Muda':'Merah';
+    if(g>=r&&g>=b) return (g>150&&r>120)?'Kuning-Hijau':'Hijau';
+    if(b>=r&&b>=g) return (b>150&&r>100)?'Ungu':'Biru';
+    if(r>180&&g>180&&b<100) return 'Kuning';
     return 'Campuran';
   };
 
-  /**
-   * Download a canvas as a PNG file
-   * @param {HTMLCanvasElement} canvas
-   * @param {string} filename
-   */
-  const downloadCanvas = (canvas, filename) => {
-    const a = document.createElement('a');
-    a.download = filename;
-    a.href = canvas.toDataURL('image/png');
-    a.click();
-  };
-
-  /**
-   * Add an event item to the log panel
-   * @param {string} msg
-   * @param {'green'|'red'|'blue'|'amber'|'gray'} color
-   */
-  const addEvent = (msg, color = 'gray') => {
-    const log = document.getElementById('event-log');
-    if (!log) return;
-
+  const log = (msg, color='gray') => {
+    const lg = el('event-log'); if(!lg) return;
     const item = document.createElement('div');
-    item.className = 'event-item';
-
-    const dot = document.createElement('div');
-    dot.className = `event-dot ${color}`;
-
-    const time = document.createElement('span');
-    time.style.cssText = 'opacity:0.6;margin-right:4px;flex-shrink:0;';
-    time.textContent = timestamp();
-
-    const text = document.createTextNode(msg);
-
-    item.appendChild(dot);
-    item.appendChild(time);
-    item.appendChild(text);
-    log.insertBefore(item, log.firstChild);
-
-    // Keep log capped at 40 entries
-    while (log.children.length > 40) log.removeChild(log.lastChild);
+    item.className = 'ev-item';
+    item.innerHTML = `<span class="ev-dot ${color}"></span><span class="ev-time">${ts()}</span>${msg}`;
+    lg.insertBefore(item, lg.firstChild);
+    while(lg.children.length > 50) lg.removeChild(lg.lastChild);
   };
 
-  return { set, pct, timestamp, clamp, mapRange, rollingAvg, colorName, downloadCanvas, addEvent };
+  const downloadCanvas = (canvas, name) => {
+    const a = document.createElement('a');
+    a.download = name; a.href = canvas.toDataURL('image/png'); a.click();
+  };
+
+  // Canvas to base64 JPEG for AI (compressed)
+  const canvasToBase64 = (canvas, quality=0.7) => {
+    // Resize to max 640px wide for API efficiency
+    const MAX = 640;
+    const ratio = Math.min(1, MAX / canvas.width);
+    const tmp = document.createElement('canvas');
+    tmp.width  = Math.round(canvas.width  * ratio);
+    tmp.height = Math.round(canvas.height * ratio);
+    tmp.getContext('2d').drawImage(canvas, 0, 0, tmp.width, tmp.height);
+    const dataUrl = tmp.toDataURL('image/jpeg', quality);
+    return dataUrl.split(',')[1]; // base64 only
+  };
+
+  return { set, pct, el, clamp, lerp, ts, rand, colorName, log, downloadCanvas, canvasToBase64 };
 })();

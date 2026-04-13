@@ -1,194 +1,310 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebCam Scanner Pro</title>
-  <link rel="stylesheet" href="css/style.css" />
-  <link rel="stylesheet" href="css/theme.css" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>WebCam Scanner Pro V2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/ai-panel.css"/>
 </head>
 <body>
+  <!-- SCAN LINES OVERLAY -->
+  <div class="scanlines" aria-hidden="true"></div>
+
   <div id="app">
-    <header class="header">
-      <div class="header-left">
-        <div class="rec-dot" id="rec-dot"></div>
-        <h1>WebCam Scanner Pro</h1>
-        <span class="badge" id="status-badge">Offline</span>
+
+    <!-- ══ TOP BAR ══ -->
+    <header class="topbar">
+      <div class="topbar-brand">
+        <div class="brand-dot" id="rec-dot"></div>
+        <span class="brand-name">WCAM<span class="brand-accent">PRO</span></span>
+        <span class="brand-ver">V2</span>
+        <div class="status-pill" id="status-pill">OFFLINE</div>
       </div>
-      <div class="header-right">
-        <span id="fps-bar">0 fps</span>
-        <span id="clock"></span>
+      <div class="topbar-stats">
+        <div class="ts-item"><span class="ts-label">FPS</span><span class="ts-val" id="fps-val">—</span></div>
+        <div class="ts-item"><span class="ts-label">RES</span><span class="ts-val" id="res-val">—</span></div>
+        <div class="ts-item"><span class="ts-label">TIME</span><span class="ts-val" id="clock-val">—</span></div>
+        <div class="ts-item"><span class="ts-label">ALERT</span><span class="ts-val alert-val" id="alert-val">OK</span></div>
       </div>
     </header>
 
-    <main class="main-grid">
-      <!-- CAMERA PANEL -->
-      <section class="cam-panel">
-        <div class="cam-wrap" id="cam-wrap">
+    <!-- ══ MAIN LAYOUT ══ -->
+    <div class="workspace">
+
+      <!-- LEFT: CAMERA + CONTROLS -->
+      <div class="left-col">
+
+        <!-- Camera View -->
+        <div class="cam-container" id="cam-container">
           <video id="video" autoplay muted playsinline></video>
-          <canvas id="overlay"></canvas>
-          <div id="no-cam-msg" class="no-cam">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M23 7l-7 5 7 5V7z"/>
-              <rect x="1" y="5" width="15" height="14" rx="2"/>
+          <canvas id="overlay" aria-hidden="true"></canvas>
+
+          <!-- Corner brackets -->
+          <div class="corner tl"></div>
+          <div class="corner tr"></div>
+          <div class="corner bl"></div>
+          <div class="corner br"></div>
+
+          <!-- No-cam state -->
+          <div id="no-cam" class="no-cam">
+            <svg viewBox="0 0 64 64" width="56" height="56" fill="none">
+              <rect x="4" y="16" width="40" height="32" rx="4" stroke="currentColor" stroke-width="2"/>
+              <path d="M44 26l16-10v32L44 38V26z" stroke="currentColor" stroke-width="2"/>
+              <line x1="4" y1="60" x2="60" y2="4" stroke="currentColor" stroke-width="2"/>
             </svg>
-            <p>Klik "Aktifkan Kamera" untuk memulai</p>
+            <p>Kamera belum aktif</p>
+            <small>Klik AKTIFKAN di bawah</small>
           </div>
-        </div>
-        <div class="cam-footer">
-          <button class="btn btn-primary" id="btn-start" onclick="App.startCam()">Aktifkan Kamera</button>
-          <button class="btn" id="btn-snap" onclick="App.takeSnapshot()" disabled>📷 Snapshot</button>
-          <button class="btn" id="btn-rec" onclick="App.toggleRecord()" disabled>⏺ Rekam</button>
-          <button class="btn btn-danger" id="btn-stop" onclick="App.stopCam()" style="display:none;">⏹ Stop</button>
-          <select id="cam-select" class="select" onchange="App.switchCam()"></select>
-          <label class="flip-label">
-            <input type="checkbox" id="flip-cb" onchange="App.toggleFlip()" /> Flip
-          </label>
-        </div>
-      </section>
 
-      <!-- SIDE PANEL -->
-      <aside class="side-panel">
-        <!-- Detection Modes -->
-        <div class="card">
-          <div class="card-title">Mode Deteksi</div>
-          <div class="mode-tabs" id="mode-tabs">
-            <span class="tab on" data-mode="motion" onclick="App.toggleMode(this)">Gerakan</span>
-            <span class="tab on" data-mode="face" onclick="App.toggleMode(this)">Wajah</span>
-            <span class="tab on" data-mode="pose" onclick="App.toggleMode(this)">Pose</span>
-            <span class="tab on" data-mode="light" onclick="App.toggleMode(this)">Cahaya</span>
-            <span class="tab on" data-mode="color" onclick="App.toggleMode(this)">Warna</span>
-            <span class="tab on" data-mode="zone" onclick="App.toggleMode(this)">Zona</span>
-          </div>
-          <div class="detect-grid">
-            <div class="detect-item">
-              <span class="detect-name">Gerakan</span>
-              <span class="detect-val" id="d-motion">—</span>
-              <div class="progress-bar"><div class="progress-fill red" id="p-motion" style="width:0%"></div></div>
-            </div>
-            <div class="detect-item">
-              <span class="detect-name">Kecepatan</span>
-              <span class="detect-val" id="d-speed">—</span>
-              <div class="progress-bar"><div class="progress-fill blue" id="p-speed" style="width:0%"></div></div>
-            </div>
-            <div class="detect-item">
-              <span class="detect-name">Wajah</span>
-              <span class="detect-val" id="d-face">—</span>
-              <div class="progress-bar"><div class="progress-fill green" id="p-face" style="width:0%"></div></div>
-            </div>
-            <div class="detect-item">
-              <span class="detect-name">Area Wajah</span>
-              <span class="detect-val" id="d-face-area">—</span>
-            </div>
-            <div class="detect-item">
-              <span class="detect-name">Kecerahan</span>
-              <span class="detect-val" id="d-bright">—</span>
-              <div class="progress-bar"><div class="progress-fill amber" id="p-bright" style="width:0%"></div></div>
-            </div>
-            <div class="detect-item">
-              <span class="detect-name">Kontras</span>
-              <span class="detect-val" id="d-contrast">—</span>
-              <div class="progress-bar"><div class="progress-fill purple" id="p-contrast" style="width:0%"></div></div>
-            </div>
-            <div class="detect-item">
-              <span class="detect-name">Warna Dominan</span>
-              <span class="detect-val" id="d-color">—</span>
-            </div>
-            <div class="detect-item">
-              <span class="detect-name">Saturasi</span>
-              <span class="detect-val" id="d-sat">—</span>
-              <div class="progress-bar"><div class="progress-fill pink" id="p-sat" style="width:0%"></div></div>
-            </div>
+          <!-- Scan indicator -->
+          <div class="scan-bar" id="scan-bar"></div>
+
+          <!-- AI thinking overlay -->
+          <div class="ai-overlay" id="ai-overlay" style="display:none">
+            <div class="ai-spinner"></div>
+            <span>AI menganalisis...</span>
           </div>
         </div>
 
-        <!-- Conditions -->
-        <div class="card">
-          <div class="card-title">Kondisi &amp; Lingkungan</div>
-          <div class="stat-row"><span class="stat-label">Status Cahaya</span><span class="stat-val" id="s-light">—</span></div>
-          <div class="stat-row"><span class="stat-label">Kebisingan Visual</span><span class="stat-val" id="s-noise">—</span></div>
-          <div class="stat-row"><span class="stat-label">Estimasi Jarak</span><span class="stat-val blue" id="s-dist">—</span></div>
-          <div class="stat-row"><span class="stat-label">Stabilitas Frame</span><span class="stat-val green" id="s-stable">—</span></div>
-          <div class="stat-row"><span class="stat-label">Resolusi Aktif</span><span class="stat-val" id="s-res">—</span></div>
-          <div class="stat-row"><span class="stat-label">Alert Gerakan</span><span class="stat-val red" id="s-alert">—</span></div>
-        </div>
-      </aside>
-    </main>
-
-    <!-- BOTTOM ROW 1 -->
-    <div class="bottom-row">
-      <div class="card">
-        <div class="card-title">Heatmap Gerakan</div>
-        <canvas id="heatmap-canvas" class="heatmap-canvas" height="80"></canvas>
-      </div>
-      <div class="card">
-        <div class="card-title">Log Kejadian</div>
-        <div class="event-log" id="event-log">
-          <div class="event-item">
-            <div class="event-dot gray"></div>
-            Menunggu kamera aktif...
+        <!-- Controls Bar -->
+        <div class="controls-bar">
+          <div class="ctrl-group">
+            <button class="ctrl-btn primary" id="btn-start" onclick="CamCtrl.start()">
+              <svg viewBox="0 0 20 20" width="14"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="10" cy="10" r="3" fill="currentColor"/></svg>
+              AKTIFKAN
+            </button>
+            <button class="ctrl-btn danger" id="btn-stop" onclick="CamCtrl.stop()" style="display:none">
+              <svg viewBox="0 0 20 20" width="14"><rect x="4" y="4" width="12" height="12" fill="currentColor" rx="1"/></svg>
+              STOP
+            </button>
+            <button class="ctrl-btn" id="btn-snap" onclick="CamCtrl.snapshot()" disabled>
+              <svg viewBox="0 0 20 20" width="14"><rect x="2" y="5" width="16" height="12" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="10" cy="11" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M7 5l1.5-2h3L13 5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              FOTO
+            </button>
+            <button class="ctrl-btn" id="btn-rec" onclick="CamCtrl.toggleRec()" disabled>
+              <svg viewBox="0 0 20 20" width="14"><circle cx="10" cy="10" r="5" fill="currentColor"/></svg>
+              REC
+            </button>
+            <button class="ctrl-btn" id="btn-ai-snap" onclick="AI.analyzeSnapshot()" disabled title="Kirim frame ke AI untuk dianalisis">
+              <svg viewBox="0 0 20 20" width="14"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm0 3l2 4h-4l2-4zm0 9l-2-4h4l-2 4z" fill="currentColor"/></svg>
+              AI SCAN
+            </button>
+          </div>
+          <div class="ctrl-group">
+            <select class="ctrl-select" id="cam-select" onchange="CamCtrl.switchCam()"></select>
+            <label class="ctrl-toggle">
+              <input type="checkbox" id="flip-cb" onchange="CamCtrl.toggleFlip()"/> FLIP
+            </label>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- BOTTOM ROW 2 -->
-    <div class="bottom-row">
-      <div class="card">
-        <div class="card-title">Kontrol PTZ Virtual</div>
-        <div class="ptz-layout">
-          <div class="ptz-pad">
-            <div></div>
-            <button class="ptz-btn" onclick="App.ptz('up')">▲</button>
-            <div></div>
-            <button class="ptz-btn" onclick="App.ptz('left')">◀</button>
-            <button class="ptz-btn center" onclick="App.ptz('center')">●</button>
-            <button class="ptz-btn" onclick="App.ptz('right')">▶</button>
-            <div></div>
-            <button class="ptz-btn" onclick="App.ptz('down')">▼</button>
-            <div></div>
-          </div>
-          <div class="zoom-control">
-            <label class="zoom-label-text">Zoom</label>
-            <input type="range" min="1" max="4" step="0.1" value="1" id="zoom-slider" oninput="App.setZoom(this.value)" />
-            <span id="zoom-label">1.0×</span>
+        <!-- Filters Row -->
+        <div class="filter-row">
+          <span class="filter-label">FILTER</span>
+          <div class="filter-chips" id="filter-chips">
+            <span class="chip active" data-f="none"        onclick="Filters.set(this,'none')">Normal</span>
+            <span class="chip"        data-f="gray"        onclick="Filters.set(this,'grayscale(1)')">Gray</span>
+            <span class="chip"        data-f="edge"        onclick="Filters.set(this,'edge')">Edge</span>
+            <span class="chip"        data-f="invert"      onclick="Filters.set(this,'invert(1)')">Invert</span>
+            <span class="chip"        data-f="thermo"      onclick="Filters.set(this,'thermo')">Thermal</span>
+            <span class="chip"        data-f="bright"      onclick="Filters.set(this,'brightness(1.6) contrast(1.1)')">Bright</span>
+            <span class="chip"        data-f="sepia"       onclick="Filters.set(this,'sepia(1)')">Sepia</span>
+            <span class="chip"        data-f="hue"         onclick="Filters.set(this,'hue-rotate(180deg)')">Hue</span>
+            <span class="chip"        data-f="vivid"       onclick="Filters.set(this,'saturate(2.5) contrast(1.2)')">Vivid</span>
+            <span class="chip"        data-f="night"       onclick="Filters.set(this,'night')">Night</span>
           </div>
         </div>
-      </div>
-      <div class="card">
-        <div class="card-title">Snapshot Terakhir</div>
-        <canvas id="snap-canvas" class="snapshot-preview"></canvas>
-        <button class="btn btn-full" onclick="App.downloadSnap()">⬇ Unduh Gambar</button>
-      </div>
-    </div>
 
-    <!-- FILTERS -->
-    <div class="card" style="margin-top:10px;">
-      <div class="card-title">Filter &amp; Efek Real-time</div>
-      <div class="filter-tabs">
-        <span class="tab on" data-filter="none" onclick="App.setFilter(this,'none')">Normal</span>
-        <span class="tab" data-filter="grayscale" onclick="App.setFilter(this,'grayscale(1)')">Grayscale</span>
-        <span class="tab" data-filter="edge" onclick="App.setFilter(this,'edge')">Edge Detect</span>
-        <span class="tab" data-filter="invert" onclick="App.setFilter(this,'invert(1)')">Invert</span>
-        <span class="tab" data-filter="bright" onclick="App.setFilter(this,'brightness(1.5)')">+Cerah</span>
-        <span class="tab" data-filter="sepia" onclick="App.setFilter(this,'sepia(1)')">Sepia</span>
-        <span class="tab" data-filter="hue" onclick="App.setFilter(this,'hue-rotate(180deg)')">Hue Shift</span>
-        <span class="tab" data-filter="thermo" onclick="App.setFilter(this,'thermo')">Thermal</span>
-        <span class="tab" data-filter="saturate" onclick="App.setFilter(this,'saturate(3)')">Vivid</span>
-        <span class="tab" data-filter="blur" onclick="App.setFilter(this,'blur(3px)')">Blur</span>
-      </div>
-    </div>
+        <!-- PTZ + Zoom -->
+        <div class="ptz-row">
+          <span class="filter-label">PTZ</span>
+          <div class="ptz-grid">
+            <button class="ptz-b" onclick="PTZ.move('up')">▲</button>
+            <button class="ptz-b" onclick="PTZ.move('left')">◀</button>
+            <button class="ptz-b center" onclick="PTZ.reset()">⊙</button>
+            <button class="ptz-b" onclick="PTZ.move('right')">▶</button>
+            <button class="ptz-b" onclick="PTZ.move('down')">▼</button>
+          </div>
+          <div class="zoom-wrap">
+            <span class="filter-label">ZOOM</span>
+            <input type="range" min="1" max="5" step="0.1" value="1" id="zoom-sl" oninput="PTZ.zoom(this.value)"/>
+            <span id="zoom-lbl" class="zoom-lbl">1.0×</span>
+          </div>
+        </div>
 
-    <!-- HISTOGRAM -->
-    <div class="card" style="margin-top:10px;">
-      <div class="card-title">Histogram RGB</div>
-      <canvas id="histogram-canvas" class="histogram-canvas" height="70"></canvas>
-    </div>
-  </div>
+        <!-- Snapshot Preview -->
+        <div class="snap-panel">
+          <div class="panel-title">SNAPSHOT</div>
+          <canvas id="snap-canvas" class="snap-canvas"></canvas>
+          <button class="ctrl-btn full" onclick="CamCtrl.downloadSnap()">⬇ DOWNLOAD</button>
+        </div>
+
+      </div><!-- /left-col -->
+
+      <!-- CENTER: DETECTION DATA -->
+      <div class="center-col">
+
+        <!-- Mode toggles -->
+        <div class="panel">
+          <div class="panel-title">DETECTION MODES</div>
+          <div class="mode-grid">
+            <label class="mode-item"><input type="checkbox" checked data-mode="motion" onchange="Modes.toggle(this)"/><span>Gerakan</span></label>
+            <label class="mode-item"><input type="checkbox" checked data-mode="face"   onchange="Modes.toggle(this)"/><span>Wajah</span></label>
+            <label class="mode-item"><input type="checkbox" checked data-mode="body"   onchange="Modes.toggle(this)"/><span>Tubuh</span></label>
+            <label class="mode-item"><input type="checkbox" checked data-mode="pose"   onchange="Modes.toggle(this)"/><span>Pose</span></label>
+            <label class="mode-item"><input type="checkbox" checked data-mode="light"  onchange="Modes.toggle(this)"/><span>Cahaya</span></label>
+            <label class="mode-item"><input type="checkbox" checked data-mode="zone"   onchange="Modes.toggle(this)"/><span>Zona</span></label>
+            <label class="mode-item"><input type="checkbox" checked data-mode="hist"   onchange="Modes.toggle(this)"/><span>Histogram</span></label>
+            <label class="mode-item"><input type="checkbox" checked data-mode="skeleton" onchange="Modes.toggle(this)"/><span>Skeleton</span></label>
+          </div>
+        </div>
+
+        <!-- Detection metrics -->
+        <div class="panel">
+          <div class="panel-title">DETEKSI REAL-TIME</div>
+          <div class="metric-grid">
+            <div class="metric"><div class="metric-label">GERAKAN</div><div class="metric-bar-wrap"><div class="metric-bar red" id="b-motion" style="width:0%"></div></div><div class="metric-val" id="v-motion">—</div></div>
+            <div class="metric"><div class="metric-label">KECEPATAN</div><div class="metric-bar-wrap"><div class="metric-bar blue" id="b-speed" style="width:0%"></div></div><div class="metric-val" id="v-speed">—</div></div>
+            <div class="metric"><div class="metric-label">WAJAH</div><div class="metric-bar-wrap"><div class="metric-bar green" id="b-face" style="width:0%"></div></div><div class="metric-val" id="v-face">—</div></div>
+            <div class="metric"><div class="metric-label">POSE TUBUH</div><div class="metric-bar-wrap"><div class="metric-bar amber" id="b-body" style="width:0%"></div></div><div class="metric-val" id="v-body">—</div></div>
+            <div class="metric"><div class="metric-label">KECERAHAN</div><div class="metric-bar-wrap"><div class="metric-bar amber" id="b-bright" style="width:0%"></div></div><div class="metric-val" id="v-bright">—</div></div>
+            <div class="metric"><div class="metric-label">KONTRAS</div><div class="metric-bar-wrap"><div class="metric-bar purple" id="b-contrast" style="width:0%"></div></div><div class="metric-val" id="v-contrast">—</div></div>
+            <div class="metric"><div class="metric-label">SATURASI</div><div class="metric-bar-wrap"><div class="metric-bar pink" id="b-sat" style="width:0%"></div></div><div class="metric-val" id="v-sat">—</div></div>
+            <div class="metric"><div class="metric-label">STABILITAS</div><div class="metric-bar-wrap"><div class="metric-bar teal" id="b-stable" style="width:0%"></div></div><div class="metric-val" id="v-stable">—</div></div>
+          </div>
+        </div>
+
+        <!-- Body scan results -->
+        <div class="panel">
+          <div class="panel-title">BODY SCAN</div>
+          <div class="body-stats">
+            <div class="bstat"><span class="bstat-l">Wajah Terdeteksi</span><span class="bstat-v" id="bs-face">—</span></div>
+            <div class="bstat"><span class="bstat-l">Area Wajah</span><span class="bstat-v" id="bs-farea">—</span></div>
+            <div class="bstat"><span class="bstat-l">Estimasi Jarak</span><span class="bstat-v accent" id="bs-dist">—</span></div>
+            <div class="bstat"><span class="bstat-l">Pose Tubuh</span><span class="bstat-v" id="bs-pose">—</span></div>
+            <div class="bstat"><span class="bstat-l">Orientasi Kepala</span><span class="bstat-v" id="bs-head">—</span></div>
+            <div class="bstat"><span class="bstat-l">Gerakan Tangan</span><span class="bstat-v" id="bs-hand">—</span></div>
+            <div class="bstat"><span class="bstat-l">Status Cahaya</span><span class="bstat-v" id="bs-light">—</span></div>
+            <div class="bstat"><span class="bstat-l">Warna Dominan</span><span class="bstat-v" id="bs-color">—</span></div>
+            <div class="bstat"><span class="bstat-l">Noise Visual</span><span class="bstat-v" id="bs-noise">—</span></div>
+            <div class="bstat"><span class="bstat-l">Alert Gerakan</span><span class="bstat-v" id="bs-alert">—</span></div>
+          </div>
+        </div>
+
+        <!-- Heatmap -->
+        <div class="panel">
+          <div class="panel-title">MOTION HEATMAP</div>
+          <canvas id="heatmap-c" class="heatmap-c"></canvas>
+        </div>
+
+        <!-- Histogram -->
+        <div class="panel" id="hist-panel">
+          <div class="panel-title">RGB HISTOGRAM</div>
+          <canvas id="hist-c" class="hist-c"></canvas>
+        </div>
+
+        <!-- Event log -->
+        <div class="panel">
+          <div class="panel-title">EVENT LOG</div>
+          <div class="event-log" id="event-log">
+            <div class="ev-item"><span class="ev-dot gray"></span><span class="ev-time">—</span>Sistem siap</div>
+          </div>
+        </div>
+
+      </div><!-- /center-col -->
+
+      <!-- RIGHT: AI PANEL -->
+      <div class="right-col">
+        <div class="ai-panel">
+          <div class="ai-header">
+            <div class="ai-logo">
+              <div class="ai-icon-wrap">
+                <svg viewBox="0 0 24 24" width="18" fill="none">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div>
+                <div class="ai-title">AI VISION ASSISTANT</div>
+                <div class="ai-sub">Powered by Claude</div>
+              </div>
+            </div>
+            <div class="ai-status-dot" id="ai-status-dot"></div>
+          </div>
+
+          <!-- AI Chat Messages -->
+          <div class="ai-messages" id="ai-messages">
+            <div class="ai-msg system">
+              <div class="ai-msg-label">SYSTEM</div>
+              <div class="ai-msg-text">Halo! Saya AI Vision Assistant. Saya bisa menganalisis apa yang terlihat di kamera, mendeteksi kondisi, memberikan saran, dan menjawab pertanyaan tentang feed video kamu. Klik <strong>AI SCAN</strong> untuk analisis visual, atau ketik pertanyaan di bawah.</div>
+            </div>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="ai-quick">
+            <div class="ai-quick-label">QUICK ACTIONS</div>
+            <div class="ai-quick-btns">
+              <button class="qa-btn" onclick="AI.quick('Analisis kondisi pencahayaan dan rekomendasikan pengaturan kamera yang optimal')">💡 Analisis Cahaya</button>
+              <button class="qa-btn" onclick="AI.quick('Deteksi dan jelaskan pose tubuh yang terlihat di kamera, apakah ergonomis?')">🧍 Analisis Pose</button>
+              <button class="qa-btn" onclick="AI.quick('Apa saja yang terdeteksi bergerak di frame? Berikan analisis gerakan detail')">👁 Analisis Gerakan</button>
+              <button class="qa-btn" onclick="AI.quick('Berikan laporan lengkap kondisi saat ini: wajah, tubuh, lingkungan, dan saran perbaikan')">📊 Laporan Lengkap</button>
+              <button class="qa-btn" onclick="AI.quick('Estimasi jarak objek dari kamera dan posisi mereka di frame')">📏 Estimasi Jarak</button>
+              <button class="qa-btn" onclick="AI.quick('Cek apakah ada masalah keamanan atau hal mencurigakan di frame kamera')">🔒 Security Check</button>
+            </div>
+          </div>
+
+          <!-- AI Input -->
+          <div class="ai-input-wrap">
+            <textarea class="ai-input" id="ai-input" rows="2" placeholder="Tanya AI tentang apa yang terlihat di kamera..."></textarea>
+            <button class="ai-send-btn" id="ai-send" onclick="AI.send()">
+              <svg viewBox="0 0 20 20" width="16" fill="currentColor"><path d="M2 10l16-8-6 8 6 8-16-8z"/></svg>
+            </button>
+          </div>
+
+          <!-- Context toggles -->
+          <div class="ai-ctx">
+            <span class="ctx-label">KIRIM KONTEKS:</span>
+            <label class="ctx-toggle"><input type="checkbox" id="ctx-frame" checked/> Frame</label>
+            <label class="ctx-toggle"><input type="checkbox" id="ctx-stats" checked/> Stats</label>
+            <label class="ctx-toggle"><input type="checkbox" id="ctx-log" checked/> Log</label>
+          </div>
+
+          <!-- AI Settings -->
+          <div class="ai-settings">
+            <div class="ai-set-row">
+              <span class="ai-set-label">AUTO SCAN</span>
+              <label class="toggle-sw">
+                <input type="checkbox" id="auto-scan-cb" onchange="AI.toggleAutoScan(this.checked)"/>
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="ai-set-row">
+              <span class="ai-set-label">INTERVAL</span>
+              <select class="ctrl-select small" id="scan-interval">
+                <option value="10000">10 detik</option>
+                <option value="30000" selected>30 detik</option>
+                <option value="60000">1 menit</option>
+                <option value="300000">5 menit</option>
+              </select>
+            </div>
+          </div>
+
+        </div><!-- /ai-panel -->
+      </div><!-- /right-col -->
+
+    </div><!-- /workspace -->
+
+  </div><!-- /app -->
 
   <script src="js/utils.js"></script>
   <script src="js/analyzer.js"></script>
+  <script src="js/body-tracker.js"></script>
   <script src="js/renderer.js"></script>
+  <script src="js/filters.js"></script>
+  <script src="js/ai.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

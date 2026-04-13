@@ -1,426 +1,288 @@
-/* =============================================
-   WebCam Scanner Pro — app.js
-   Main application controller (ES6+)
-   ============================================= */
-
+/* ══════════════════════════════════════
+   WCAM PRO V2 — app.js
+   Main controller: camera, render loop, UI
+══════════════════════════════════════ */
 'use strict';
 
-const App = (() => {
+/* ── Global state ── */
+const State = {
+  stream:    null,
+  animId:    null,
+  isRec:     false,
+  mediaRec:  null,
+  recChunks: [],
+  fps:       0, fpsLast: Date.now(), fpsCount: 0,
+  frameN:    0,
+  zoom:      1, panX:0, panY:0,
+  isFlipped: false,
+  lastAlert: 0,
+  faces:     [],
+  bodyData:  null,
+  modes: { motion:true, face:true, body:true, pose:true, light:true, zone:true, hist:true, skeleton:true },
+};
 
-  /* ---- State ---- */
-  const state = {
-    stream:        null,
-    animId:        null,
-    isRecording:   false,
-    mediaRecorder: null,
-    recordChunks:  [],
-    fpsCount:      0,
-    fpsLast:       Date.now(),
-    frameCount:    0,
-    zoom:          1,
-    panX:          0,
-    panY:          0,
-    activeFilter:  'none',
-    isFlipped:     false,
-    modes: { motion: true, face: true, pose: true, light: true, color: true, zone: true },
-    lastMotionAlert: 0,
-    faceRegions:   [],
-  };
+/* ── DOM ── */
+const video     = document.getElementById('video');
+const overlay   = document.getElementById('overlay');
+const ctx       = overlay.getContext('2d');
+const hmC       = document.getElementById('heatmap-c');
+const hmX       = hmC.getContext('2d');
+const histC     = document.getElementById('hist-c');
+const histX     = histC.getContext('2d');
+const snapC     = document.getElementById('snap-canvas');
+const snapX     = snapC.getContext('2d');
+snapC.width=320; snapC.height=180;
 
-  /* ---- DOM refs ---- */
-  const video       = document.getElementById('video');
-  const overlay     = document.getElementById('overlay');
-  const ctx         = overlay.getContext('2d');
-  const hmc         = document.getElementById('heatmap-canvas');
-  const hmCtx       = hmc.getContext('2d');
-  const histCanvas  = document.getElementById('histogram-canvas');
-  const histCtx     = histCanvas.getContext('2d');
-  const snapCanvas  = document.getElementById('snap-canvas');
-  const snapCtx     = snapCanvas.getContext('2d');
+/* ── Clock ── */
+setInterval(()=> U.set('clock-val', U.ts()), 1000); U.set('clock-val', U.ts());
 
-  snapCanvas.width  = 320;
-  snapCanvas.height = 180;
+/* ── Modes ── */
+const Modes = {
+  toggle(cb) {
+    State.modes[cb.dataset.mode] = cb.checked;
+    U.log(`Mode ${cb.dataset.mode}: ${cb.checked?'ON':'OFF'}`, 'gray');
+  }
+};
 
-  /* ---- Clock ---- */
-  const tickClock = () => {
-    document.getElementById('clock').textContent =
-      new Date().toLocaleTimeString('id-ID');
-  };
-  setInterval(tickClock, 1000);
-  tickClock();
+/* ── PTZ ── */
+const PTZ = {
+  move(dir) {
+    const s=30;
+    if(dir==='up')    State.panY=U.clamp(State.panY-s,-200,200);
+    if(dir==='down')  State.panY=U.clamp(State.panY+s,-200,200);
+    if(dir==='left')  State.panX=U.clamp(State.panX-s,-200,200);
+    if(dir==='right') State.panX=U.clamp(State.panX+s,-200,200);
+  },
+  reset() {
+    State.panX=0; State.panY=0; State.zoom=1;
+    U.el('zoom-sl').value=1; U.set('zoom-lbl','1.0×');
+  },
+  zoom(v) {
+    State.zoom=parseFloat(v);
+    U.set('zoom-lbl',State.zoom.toFixed(1)+'×');
+  }
+};
 
-  /* ----------------------------------------------------------
-     CAMERA CONTROL
-  ---------------------------------------------------------- */
-
-  const startCam = async () => {
+/* ── Camera Control ── */
+const CamCtrl = {
+  async start() {
     try {
-      const sel         = document.getElementById('cam-select').value;
-      const constraints = {
-        video: {
-          deviceId: sel ? { exact: sel } : undefined,
-          width:  { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false
-      };
-
-      state.stream = await navigator.mediaDevices.getUserMedia(constraints);
-      video.srcObject = state.stream;
-
-      document.getElementById('no-cam-msg').style.display  = 'none';
-      document.getElementById('btn-start').disabled        = true;
-      document.getElementById('btn-stop').style.display    = 'inline-flex';
-      document.getElementById('btn-snap').disabled         = false;
-      document.getElementById('btn-rec').disabled          = false;
-
-      const badge   = document.getElementById('status-badge');
-      badge.textContent = 'Live';
-      badge.classList.add('live');
-
-      const dot = document.getElementById('rec-dot');
-      dot.classList.add('live');
-
-      Utils.addEvent('Kamera berhasil diaktifkan', 'green');
-
-      await _enumCams();
-
-      video.addEventListener('loadedmetadata', () => {
-        const W = video.videoWidth  || 640;
-        const H = video.videoHeight || 480;
-        overlay.width  = W;
-        overlay.height = H;
-
-        const hw = hmc.offsetWidth || 300;
-        hmc.width       = hw;
-        histCanvas.width = hw;
-
-        Utils.set('s-res', `${W}×${H}`);
-        _loop();
-      }, { once: true });
-
-    } catch (err) {
-      Utils.addEvent('Error kamera: ' + err.message, 'red');
-      alert('Tidak dapat mengakses kamera:\n' + err.message);
+      const devId = U.el('cam-select').value;
+      State.stream = await navigator.mediaDevices.getUserMedia({
+        video:{ deviceId:devId?{exact:devId}:undefined, width:{ideal:1280}, height:{ideal:720} },
+        audio:false
+      });
+      video.srcObject = State.stream;
+      U.el('no-cam').style.display='none';
+      U.el('btn-start').disabled=true;
+      U.el('btn-stop').style.display='flex';
+      U.el('btn-snap').disabled=false;
+      U.el('btn-rec').disabled=false;
+      U.el('btn-ai-snap').disabled=false;
+      U.el('status-pill').textContent='LIVE';
+      U.el('status-pill').classList.add('live');
+      U.el('rec-dot').classList.add('live');
+      U.el('scan-bar').classList.add('active');
+      U.log('Kamera aktif', 'green');
+      await this._enumCams();
+      video.addEventListener('loadedmetadata',()=>{
+        overlay.width  = video.videoWidth  || 640;
+        overlay.height = video.videoHeight || 480;
+        hmC.width  = hmC.offsetWidth  || 300;
+        histC.width = histC.offsetWidth || 300;
+        U.set('res-val', `${video.videoWidth}×${video.videoHeight}`);
+        this._loop();
+      },{once:true});
+    } catch(e) {
+      U.log('Error: '+e.message,'red');
+      alert('Tidak dapat membuka kamera:\n'+e.message);
     }
-  };
-
-  const stopCam = () => {
-    if (state.stream) state.stream.getTracks().forEach(t => t.stop());
-    state.stream = null;
-
-    if (state.animId) cancelAnimationFrame(state.animId);
-    state.animId = null;
-
-    video.srcObject = null;
-    ctx.clearRect(0, 0, overlay.width, overlay.height);
-
-    document.getElementById('no-cam-msg').style.display  = 'flex';
-    document.getElementById('btn-start').disabled        = false;
-    document.getElementById('btn-stop').style.display    = 'none';
-    document.getElementById('btn-snap').disabled         = true;
-    document.getElementById('btn-rec').disabled          = true;
-
-    const badge = document.getElementById('status-badge');
-    badge.textContent = 'Offline';
-    badge.classList.remove('live');
-
-    document.getElementById('rec-dot').classList.remove('live');
-
-    Analyzer.reset();
-    Utils.addEvent('Kamera dimatikan', 'gray');
-    _resetStats();
-  };
-
-  const switchCam = async () => {
-    if (!state.stream) return;
-    stopCam();
-    await startCam();
-  };
-
-  const toggleFlip = () => {
-    state.isFlipped = document.getElementById('flip-cb').checked;
-    Utils.addEvent('Flip: ' + (state.isFlipped ? 'ON' : 'OFF'), 'amber');
-  };
-
-  const _enumCams = async () => {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const sel     = document.getElementById('cam-select');
-    sel.innerHTML = '';
-    devices.filter(d => d.kind === 'videoinput').forEach((d, i) => {
-      const op = document.createElement('option');
-      op.value       = d.deviceId;
-      op.textContent = d.label || `Kamera ${i + 1}`;
-      sel.appendChild(op);
-    });
-  };
-
-  /* ----------------------------------------------------------
-     SNAPSHOT & RECORDING
-  ---------------------------------------------------------- */
-
-  const takeSnapshot = () => {
-    if (!state.stream) return;
-    const sc  = document.createElement('canvas');
-    sc.width  = video.videoWidth  || 640;
-    sc.height = video.videoHeight || 480;
-    const sctx = sc.getContext('2d');
-    if (state.isFlipped) { sctx.translate(sc.width, 0); sctx.scale(-1, 1); }
-    sctx.drawImage(video, 0, 0);
-    snapCtx.drawImage(sc, 0, 0, snapCanvas.width, snapCanvas.height);
-    Utils.addEvent('Snapshot diambil', 'blue');
-  };
-
-  const downloadSnap = () => {
-    Utils.downloadCanvas(snapCanvas, `webcam-snap-${Date.now()}.png`);
-    Utils.addEvent('Gambar diunduh', 'blue');
-  };
-
-  const toggleRecord = () => {
-    if (!state.stream) return;
-
-    if (!state.isRecording) {
-      state.recordChunks = [];
-      state.mediaRecorder = new MediaRecorder(state.stream, { mimeType: 'video/webm;codecs=vp9' });
-      state.mediaRecorder.ondataavailable = e => state.recordChunks.push(e.data);
-      state.mediaRecorder.onstop = () => {
-        const blob = new Blob(state.recordChunks, { type: 'video/webm' });
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href     = url;
-        a.download = `rekaman-${Date.now()}.webm`;
-        a.click();
-        URL.revokeObjectURL(url);
-        Utils.addEvent('Rekaman disimpan ke file', 'green');
+  },
+  stop() {
+    if(State.stream) State.stream.getTracks().forEach(t=>t.stop());
+    State.stream=null;
+    if(State.animId) cancelAnimationFrame(State.animId);
+    video.srcObject=null; ctx.clearRect(0,0,overlay.width,overlay.height);
+    U.el('no-cam').style.display='flex';
+    U.el('btn-start').disabled=false;
+    U.el('btn-stop').style.display='none';
+    ['btn-snap','btn-rec','btn-ai-snap'].forEach(id=>U.el(id).disabled=true);
+    U.el('status-pill').textContent='OFFLINE'; U.el('status-pill').classList.remove('live');
+    U.el('rec-dot').classList.remove('live');
+    U.el('scan-bar').classList.remove('active');
+    U.el('alert-val').textContent='OK'; U.el('alert-val').classList.remove('danger');
+    Analyzer.reset(); U.log('Kamera stop','gray'); this._resetStats();
+  },
+  async switchCam() { if(State.stream){this.stop(); await this.start();} },
+  toggleFlip() { State.isFlipped=U.el('flip-cb').checked; },
+  snapshot() {
+    if(!State.stream) return;
+    const sc=document.createElement('canvas');
+    sc.width=video.videoWidth||640; sc.height=video.videoHeight||480;
+    const sctx=sc.getContext('2d');
+    if(State.isFlipped){sctx.translate(sc.width,0);sctx.scale(-1,1);}
+    sctx.drawImage(video,0,0);
+    snapX.drawImage(sc,0,0,snapC.width,snapC.height);
+    U.log('Snapshot diambil','blue');
+  },
+  downloadSnap() { U.downloadCanvas(snapC,'wcam-v2-'+Date.now()+'.png'); U.log('Download foto','blue'); },
+  toggleRec() {
+    if(!State.stream) return;
+    if(!State.isRec) {
+      State.recChunks=[];
+      State.mediaRec=new MediaRecorder(State.stream,{mimeType:'video/webm;codecs=vp9'});
+      State.mediaRec.ondataavailable=e=>State.recChunks.push(e.data);
+      State.mediaRec.onstop=()=>{
+        const blob=new Blob(State.recChunks,{type:'video/webm'});
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+        a.download='wcam-v2-rec-'+Date.now()+'.webm'; a.click();
+        U.log('Rekaman disimpan','green');
       };
-      state.mediaRecorder.start();
-      state.isRecording = true;
-
-      const btn = document.getElementById('btn-rec');
-      btn.textContent = '⏹ Stop Rekam';
-      btn.classList.add('btn-primary');
-      Utils.addEvent('Rekaman dimulai', 'red');
-
+      State.mediaRec.start(); State.isRec=true;
+      U.el('btn-rec').textContent='⏹ STOP'; U.el('btn-rec').classList.add('active');
+      U.log('Rekaman mulai','red');
     } else {
-      state.mediaRecorder.stop();
-      state.isRecording = false;
-
-      const btn = document.getElementById('btn-rec');
-      btn.textContent = '⏺ Rekam';
-      btn.classList.remove('btn-primary');
+      State.mediaRec.stop(); State.isRec=false;
+      U.el('btn-rec').textContent='⏺ REC'; U.el('btn-rec').classList.remove('active');
     }
-  };
+  },
+  async _enumCams() {
+    const devs=await navigator.mediaDevices.enumerateDevices();
+    const sel=U.el('cam-select'); sel.innerHTML='';
+    devs.filter(d=>d.kind==='videoinput').forEach((d,i)=>{
+      const op=document.createElement('option');
+      op.value=d.deviceId; op.textContent=d.label||`Kamera ${i+1}`; sel.appendChild(op);
+    });
+  },
+  _resetStats() {
+    ['v-motion','v-speed','v-face','v-body','v-bright','v-contrast','v-sat','v-stable',
+     'bs-face','bs-farea','bs-dist','bs-pose','bs-head','bs-hand','bs-light','bs-color','bs-noise','bs-alert'
+    ].forEach(id=>U.set(id,'—'));
+    ['b-motion','b-speed','b-face','b-body','b-bright','b-contrast','b-sat','b-stable'
+    ].forEach(id=>U.pct(id,0));
+    hmX.clearRect(0,0,hmC.width,hmC.height);
+    histX.clearRect(0,0,histC.width,histC.height);
+  },
 
-  /* ----------------------------------------------------------
-     FILTER & MODES
-  ---------------------------------------------------------- */
-
-  const setFilter = (el, filter) => {
-    document.querySelectorAll('[data-filter]').forEach(e => e.classList.remove('on'));
-    el.classList.add('on');
-    state.activeFilter = filter;
-    // Remove CSS filter from video (we'll apply on canvas)
-    video.style.filter = '';
-    Utils.addEvent('Filter aktif: ' + el.textContent.trim(), 'amber');
-  };
-
-  const toggleMode = (el) => {
-    const m = el.dataset.mode;
-    state.modes[m] = !state.modes[m];
-    el.classList.toggle('on', state.modes[m]);
-    Utils.addEvent(`Mode ${m}: ${state.modes[m] ? 'ON' : 'OFF'}`, 'gray');
-  };
-
-  /* ----------------------------------------------------------
-     PTZ & ZOOM
-  ---------------------------------------------------------- */
-
-  const ptz = (dir) => {
-    const step = 25;
-    if      (dir === 'up')     state.panY = Utils.clamp(state.panY - step, -150, 150);
-    else if (dir === 'down')   state.panY = Utils.clamp(state.panY + step, -150, 150);
-    else if (dir === 'left')   state.panX = Utils.clamp(state.panX - step, -150, 150);
-    else if (dir === 'right')  state.panX = Utils.clamp(state.panX + step, -150, 150);
-    else {
-      state.panX = 0; state.panY = 0; state.zoom = 1;
-      document.getElementById('zoom-slider').value = 1;
-      document.getElementById('zoom-label').textContent = '1.0×';
+  /* ── MAIN LOOP ── */
+  _loop() {
+    if(!State.stream) return;
+    State.animId=requestAnimationFrame(()=>CamCtrl._loop());
+    State.frameN++;
+    State.fpsCount++;
+    const now=Date.now();
+    if(now-State.fpsLast>=1000){
+      U.set('fps-val',State.fpsCount+''); State.fpsCount=0; State.fpsLast=now;
     }
-    Utils.addEvent('PTZ: ' + dir, 'blue');
-  };
+    if(State.frameN%2!==0) return; // every 2nd frame
 
-  const setZoom = (val) => {
-    state.zoom = parseFloat(val);
-    document.getElementById('zoom-label').textContent = state.zoom.toFixed(1) + '×';
-  };
+    const W=overlay.width, H=overlay.height;
+    ctx.clearRect(0,0,W,H);
 
-  /* ----------------------------------------------------------
-     MAIN RENDER LOOP
-  ---------------------------------------------------------- */
-
-  const _loop = () => {
-    if (!state.stream) return;
-    state.animId = requestAnimationFrame(_loop);
-
-    state.frameCount++;
-    state.fpsCount++;
-    const now = Date.now();
-    if (now - state.fpsLast >= 1000) {
-      document.getElementById('fps-bar').textContent = state.fpsCount + ' fps';
-      state.fpsCount = 0;
-      state.fpsLast  = now;
-    }
-
-    // Process every 2nd frame for performance
-    if (state.frameCount % 2 !== 0) return;
-
-    const W = overlay.width;
-    const H = overlay.height;
-    ctx.clearRect(0, 0, W, H);
-
-    // ---- Draw video to canvas (with flip) ----
+    // Draw video with optional CSS filter
     ctx.save();
-    if (state.isFlipped) { ctx.translate(W, 0); ctx.scale(-1, 1); }
-
-    // Apply CSS filter (non-pixel ones)
-    const cssFilter = ['grayscale(1)', 'invert(1)', 'brightness(1.5)', 'sepia(1)', 'hue-rotate(180deg)', 'saturate(3)', 'blur(3px)'];
-    if (cssFilter.includes(state.activeFilter)) {
-      ctx.filter = state.activeFilter;
-    }
-    ctx.drawImage(video, 0, 0, W, H);
-    ctx.filter = 'none';
+    if(State.isFlipped){ctx.translate(W,0);ctx.scale(-1,1);}
+    const f=Filters.getCurrent();
+    if(Filters.isCSSFilter()) ctx.filter=f;
+    ctx.drawImage(video,0,0,W,H);
+    ctx.filter='none';
     ctx.restore();
 
-    // ---- Get pixel data for analysis ----
-    const imgData = ctx.getImageData(0, 0, W, H);
+    // Get pixels
+    let imgData=ctx.getImageData(0,0,W,H);
+    const pixelFiltered=Renderer.applyPixelFilter(imgData,f);
+    if(pixelFiltered) ctx.putImageData(imgData,0,0);
+    imgData=ctx.getImageData(0,0,W,H);
+    const d=imgData.data;
 
-    // ---- Pixel filter (edge / thermal) ----
-    const wasPixelFilter = Renderer.applyPixelFilter(imgData, state.activeFilter);
-    if (wasPixelFilter) ctx.putImageData(imgData, 0, 0);
-
-    const d = imgData.data;
-
-    // ---- Zoom/pan crop ----
-    if (state.zoom > 1) {
-      const cw = W / state.zoom, ch = H / state.zoom;
-      const cx2 = Utils.clamp(W / 2 - cw / 2 + state.panX, 0, W - cw);
-      const cy2 = Utils.clamp(H / 2 - ch / 2 + state.panY, 0, H - ch);
-      const zoomed = ctx.getImageData(cx2, cy2, cw, ch);
-      const tmp   = document.createElement('canvas');
-      tmp.width = cw; tmp.height = ch;
-      tmp.getContext('2d').putImageData(zoomed, 0, 0);
-      ctx.clearRect(0, 0, W, H);
-      ctx.drawImage(tmp, 0, 0, W, H);
+    // Zoom / pan crop
+    if(State.zoom>1) {
+      const cw=W/State.zoom,ch=H/State.zoom;
+      const cx2=U.clamp(W/2-cw/2+State.panX,0,W-cw);
+      const cy2=U.clamp(H/2-ch/2+State.panY,0,H-ch);
+      const zoomed=ctx.getImageData(cx2,cy2,cw,ch);
+      const tmp=document.createElement('canvas'); tmp.width=cw; tmp.height=ch;
+      tmp.getContext('2d').putImageData(zoomed,0,0);
+      ctx.clearRect(0,0,W,H); ctx.drawImage(tmp,0,0,W,H);
     }
 
-    // ---- LIGHT ANALYSIS ----
-    if (state.modes.light) {
-      const light = Analyzer.analyzeLight(d, W, H);
-      Utils.set('d-bright',   light.brightness + '%');
-      Utils.pct('p-bright',   light.brightness);
-      Utils.set('d-contrast', light.contrast   + '%');
-      Utils.pct('p-contrast', light.contrast);
-      Utils.set('d-sat',      light.sat        + '%');
-      Utils.pct('p-sat',      light.sat);
-      Utils.set('s-light',    light.lightStatus);
-      Utils.set('s-noise',    light.noise < 5 ? 'Rendah' : light.noise < 18 ? 'Sedang' : 'Tinggi');
-
-      // Dominant color
-      const cname = Utils.colorName(light.avgR, light.avgG, light.avgB);
-      const cel   = document.getElementById('d-color');
-      if (cel) {
-        cel.textContent = cname;
-        cel.style.color = `rgb(${light.avgR},${light.avgG},${light.avgB})`;
-      }
+    // ── LIGHT ANALYSIS ──
+    if(State.modes.light) {
+      const lt=Analyzer.analyzeLight(d,W,H);
+      U.set('v-bright',lt.brightness+'%'); U.pct('b-bright',lt.brightness);
+      U.set('v-contrast',lt.contrast+'%'); U.pct('b-contrast',lt.contrast);
+      U.set('v-sat',lt.sat+'%'); U.pct('b-sat',lt.sat);
+      U.set('bs-light',lt.lightStatus);
+      U.set('bs-noise',lt.noise<5?'Rendah':lt.noise<18?'Sedang':'Tinggi');
+      const cname=U.colorName(lt.avgR,lt.avgG,lt.avgB);
+      const cel=U.el('bs-color'); if(cel){cel.textContent=cname;cel.style.color=`rgb(${lt.avgR},${lt.avgG},${lt.avgB})`;}
     }
 
-    // ---- MOTION ANALYSIS ----
-    if (state.modes.motion) {
-      const motion = Analyzer.analyzeMotion(d, W, H);
-      Utils.set('d-motion',  motion.motionPct + '%');
-      Utils.pct('p-motion',  motion.motionPct);
-      Utils.set('d-speed',   motion.speedLabel);
-      Utils.pct('p-speed',   motion.speedPct || 0);
-
-      if (motion.motionPct > 18) {
-        const t = Date.now();
-        if (t - state.lastMotionAlert > 1200) {
-          Utils.addEvent(`Gerakan terdeteksi (${motion.motionPct}%)`, 'red');
-          state.lastMotionAlert = t;
-        }
-        Utils.set('s-alert', 'AKTIF ⚠');
-        const sa = document.getElementById('s-alert');
-        if (sa) sa.className = 'stat-val red';
+    // ── MOTION ──
+    if(State.modes.motion) {
+      const mo=Analyzer.analyzeMotion(d,W,H);
+      U.set('v-motion',mo.motionPct+'%'); U.pct('b-motion',mo.motionPct);
+      U.set('v-speed',mo.speedLabel); U.pct('b-speed',mo.speedPct||0);
+      Renderer.drawHeatmap(hmC,hmX,Analyzer.getHeatmap());
+      const alertEl=U.el('alert-val');
+      if(mo.motionPct>20) {
+        const t=Date.now();
+        if(t-State.lastAlert>1500){U.log(`Gerakan terdeteksi (${mo.motionPct}%)!`,'red');State.lastAlert=t;}
+        U.set('bs-alert','AKTIF ⚠'); if(alertEl){alertEl.textContent='ALERT!';alertEl.classList.add('danger');}
+        U.el('bs-alert').className='bstat-v danger';
       } else {
-        Utils.set('s-alert', 'Aman ✓');
-        const sa = document.getElementById('s-alert');
-        if (sa) sa.className = 'stat-val green';
+        U.set('bs-alert','Aman ✓'); if(alertEl){alertEl.textContent='OK';alertEl.classList.remove('danger');}
+        U.el('bs-alert').className='bstat-v ok';
       }
-
-      // Heatmap
-      Renderer.drawHeatmap(hmc, hmCtx, Analyzer.getHeatmap());
     }
 
-    // ---- FACE DETECTION ----
-    if (state.modes.face) {
-      state.faceRegions = Analyzer.detectFaces(d, W, H);
-      const fc = state.faceRegions.length;
-      Utils.set('d-face',      fc > 0 ? fc + (fc === 1 ? ' wajah' : ' wajah') : 'Tidak ada');
-      Utils.pct('p-face',      Math.min(100, fc * 34));
-
-      if (fc > 0) {
-        const f = state.faceRegions[0];
-        Utils.set('d-face-area', Math.round(f.w * f.h / 1000) + 'K px²');
-        const dist = Analyzer.estimateDist(f.h, H);
-        Utils.set('s-dist', dist ? `~${dist} m` : '—');
-        Renderer.drawFaces(ctx, state.faceRegions);
+    // ── FACE DETECTION ──
+    if(State.modes.face) {
+      State.faces=Analyzer.detectFaces(d,W,H);
+      const fc=State.faces.length;
+      U.set('v-face',fc>0?fc+'':'0'); U.pct('b-face',Math.min(100,fc*50));
+      U.set('bs-face',fc>0?fc+' terdeteksi':'Tidak ada');
+      if(fc>0){
+        U.set('bs-farea',Math.round(State.faces[0].w*State.faces[0].h/1000)+'K px²');
+        State.faces.forEach((face,i)=>Renderer.drawFace(ctx,face,i));
+        Renderer.drawCrosshair(ctx,State.faces[0]);
       } else {
-        Utils.set('d-face-area', '—');
-        Utils.set('s-dist',      '—');
+        U.set('bs-farea','—');
       }
     }
 
-    // ---- POSE SKELETON ----
-    if (state.modes.pose && state.faceRegions.length > 0) {
-      Renderer.drawPose(ctx, state.faceRegions[0]);
+    // ── BODY TRACKING ──
+    if(State.modes.body||State.modes.pose||State.modes.skeleton) {
+      State.bodyData=BodyTracker.update(d,W,H,State.faces);
+      const {body,poseInfo,handInfo}=State.bodyData;
+
+      if(State.modes.body&&body) Renderer.drawBody(ctx,body);
+      if(State.modes.skeleton&&body&&State.faces[0]) Renderer.drawSkeleton(ctx,body,State.faces[0]);
+
+      U.set('bs-pose',poseInfo.pose);
+      U.set('bs-head',poseInfo.headDir);
+      U.set('bs-hand',handInfo);
+      U.set('v-body',poseInfo.confidence+'%'); U.pct('b-body',poseInfo.confidence);
+      U.set('v-stable',Analyzer.getStability()+'%'); U.pct('b-stable',Analyzer.getStability());
+
+      // Distance estimate
+      if(State.faces[0]) {
+        const dist=Analyzer.estimateDist(State.faces[0].h,H);
+        U.set('bs-dist',dist?'~'+dist+' m':'—');
+      }
     }
 
-    // ---- ZONE OVERLAY ----
-    if (state.modes.zone) {
-      Renderer.drawZones(ctx, W, H, Analyzer.getHeatmap());
+    // ── ZONE OVERLAY ──
+    if(State.modes.zone) Renderer.drawZones(ctx,W,H,Analyzer.getHeatmap());
+
+    // ── HISTOGRAM (every 5 frames) ──
+    if(State.modes.hist&&State.frameN%5===0) {
+      Renderer.drawHistogram(histC,histX,Analyzer.computeHistogram(d));
     }
+  }
+};
 
-    // ---- STABILITY ----
-    Utils.set('s-stable', Analyzer.getStability() + '%');
-
-    // ---- HISTOGRAM (every 6th frame) ----
-    if (state.frameCount % 6 === 0) {
-      const hist = Analyzer.computeHistogram(d);
-      Renderer.drawHistogram(histCanvas, histCtx, hist);
-    }
-  };
-
-  /* ----------------------------------------------------------
-     HELPERS
-  ---------------------------------------------------------- */
-
-  const _resetStats = () => {
-    const ids = [
-      'd-motion','d-speed','d-face','d-face-area','d-bright',
-      'd-contrast','d-color','d-sat','s-light','s-noise',
-      's-dist','s-stable','s-alert'
-    ];
-    ids.forEach(id => Utils.set(id, '—'));
-    ['p-motion','p-speed','p-face','p-bright','p-contrast','p-sat'].forEach(id => Utils.pct(id, 0));
-    hmCtx.clearRect(0, 0, hmc.width, hmc.height);
-    histCtx.clearRect(0, 0, histCanvas.width, histCanvas.height);
-  };
-
-  // Public API
-  return {
-    startCam, stopCam, switchCam, toggleFlip,
-    takeSnapshot, downloadSnap, toggleRecord,
-    setFilter, toggleMode,
-    ptz, setZoom
-  };
-})();
+// Start on load
+document.addEventListener('DOMContentLoaded', ()=>{
+  CamCtrl._enumCams().catch(()=>{});
+});
